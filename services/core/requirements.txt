@@ -8,6 +8,7 @@ numpy==2.2.1
 shapely==2.0.6
 rasterio==1.4.3
 xarray==2024.11.0
+scipy==1.14.1
 netCDF4==1.7.2
 opendrift==1.13.0
 psycopg[binary]==3.2.3
