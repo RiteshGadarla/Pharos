@@ -18,7 +18,8 @@ Build in progress, phase by phase, per the acceptance tests in PLAN.md section 1
 - [ ] P3: evaluation, honest per-class IoU (deferred, blocked on the labeled dataset, see PLAN.md section 4A item 4)
 - [x] P4: wind physics gate, synthetic FP-reduction measurement
 - [x] P5: characterisation, SlickFeatures geometry and relative age band
-- [ ] P6 onward: see PLAN.md section 14
+- [x] P6: backward drift ensemble (real OpenDrift/OpenOil) and origin probability field
+- [ ] P7 onward: see PLAN.md section 14
 
 P2 was validated against a synthetic fixture scene (`scripts/make_fixture_scene.py`, `data/fixtures/synthetic_scene.tif`), not a real Sentinel-1 product, since Sentinel-1 access is blocked on the Earthdata account (PLAN.md section 4A). Swap in a real scene once that account exists; the pipeline itself does not change.
 

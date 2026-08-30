@@ -33,6 +33,7 @@ hindcast:
   backend: opendrift_openoil
   n_members_full: 30
   n_members_live_demo: 8
+  particles_per_member: 50
   backward_horizon_hours: 48
   wind_drift_factor_mean: 0.03
   wind_drift_factor_range: [0.02, 0.04]

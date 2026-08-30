@@ -12,6 +12,11 @@ single fixture:
   72.9 <= lon < 73.2   : 6.0 m/s  (accept)
   lon >= 73.2          : 13.0 m/s (above wind_max, suppress)
 
+This grid intentionally does not extend into the P6 ensemble fixture's
+open-ocean domain (see make_fixture_currents.py): the wind gate only
+ever samples a single detection centroid, so it does not need the
+coastline clearance the backward drift ensemble does.
+
 Run: python3 scripts/make_fixture_wind.py
 """
 
@@ -21,7 +26,13 @@ import numpy as np
 import xarray as xr
 
 OUT_PATH = "data/fixtures/synthetic_wind.nc"
-ACQUIRED_AT = "2026-01-15T02:30:00"
+ACQUIRED_AT = np.datetime64("2026-01-15T02:30:00")
+# Backward ensembles run up to backward_horizon_hours (default 48h, see
+# pipeline.yaml) before the acquisition time, so the forcing must cover
+# that whole window, not just the acquisition instant.
+HOURS_BEFORE = 60
+HOURS_AFTER = 6
+TIMES = ACQUIRED_AT + np.arange(-HOURS_BEFORE, HOURS_AFTER + 1) * np.timedelta64(1, "h")
 
 LATS = np.round(np.arange(19.0, 20.01, 0.1), 2)
 LONS = np.round(np.arange(72.0, 73.51, 0.1), 2)
@@ -38,24 +49,32 @@ def zone_speed(lon: float) -> float:
 
 
 def make_dataset() -> xr.Dataset:
-    u10 = np.zeros((1, len(LATS), len(LONS)), dtype=np.float32)
-    v10 = np.zeros((1, len(LATS), len(LONS)), dtype=np.float32)
+    n_times = len(TIMES)
+    u10 = np.zeros((n_times, len(LATS), len(LONS)), dtype=np.float32)
+    v10 = np.zeros((n_times, len(LATS), len(LONS)), dtype=np.float32)
     for j, lon in enumerate(LONS):
         speed = zone_speed(lon)
-        u10[0, :, j] = speed  # eastward component only, v = 0
+        u10[:, :, j] = speed  # eastward component only, v = 0, static in time
     return xr.Dataset(
         {
-            "u10": (("time", "lat", "lon"), u10),
-            "v10": (("time", "lat", "lon"), v10),
+            "u10": (("time", "lat", "lon"), u10, {
+                "standard_name": "x_wind",
+                "units": "m s-1",
+            }),
+            "v10": (("time", "lat", "lon"), v10, {
+                "standard_name": "y_wind",
+                "units": "m s-1",
+            }),
         },
         coords={
-            "time": [np.datetime64(ACQUIRED_AT)],
-            "lat": LATS,
-            "lon": LONS,
+            "time": TIMES,
+            "lat": ("lat", LATS, {"standard_name": "latitude", "units": "degrees_north"}),
+            "lon": ("lon", LONS, {"standard_name": "longitude", "units": "degrees_east"}),
         },
         attrs={
             "source": "synthetic fixture, not real ERA5/GFS data",
             "note": "PLAN.md section 4A: CDS/GFS not yet wired up",
+            "Conventions": "CF-1.8",
         },
     )
 
