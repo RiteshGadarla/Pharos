@@ -1,0 +1,40 @@
+# The hero scenario definition. See PLAN.md section 4A item 5 and section 9.
+#
+# TODO before P2: fill in the real hero incident (date, bbox, source
+# reference) once it is picked. Placeholder values below are clearly
+# marked and must not be presented as real in any demo or dossier.
+
+incident:
+  case_id: "SLICKTRACE-DEMO-0001"
+  status: "placeholder, not a real incident"
+  date: null
+  bbox: null            # [minlon, minlat, maxlon, maxlat]
+  source_reference: null
+
+seed: 26143
+
+synthetic_ais:
+  region: "placeholder"
+  lane_source: "placeholder, must be real shipping lane coordinates before demo"
+  culprit:
+    mmsi: "419000001"
+    behaviour: "crosses high-probability region, slows to steady low speed, dark gap, resumes on different course"
+  hard_negatives:
+    - mmsi: "419000002"
+      behaviour: "passes through the field at the wrong time"
+    - mmsi: "419000003"
+      behaviour: "dark gap far from the field"
+    - mmsi: "419000004"
+      behaviour: "spatially close throughout, constant transit speed, no dark gap"
+
+rewind_sequence:
+  total_duration_s: 45
+  beats:
+    - {id: 0, name: hold, duration_s: 3}
+    - {id: 1, name: dissolve, duration_s: 3}
+    - {id: 2, name: rewind, duration_s: 12}
+    - {id: 3, name: bloom, duration_s: 4}
+    - {id: 4, name: traffic, duration_s: 6}
+    - {id: 5, name: elimination, duration_s: 8}
+    - {id: 6, name: dark_gap, duration_s: 5}
+    - {id: 7, name: verdict, duration_s: 4}

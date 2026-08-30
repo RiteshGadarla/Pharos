@@ -1,0 +1,51 @@
+# Pipeline-wide tiling, ensemble and path configuration. See PLAN.md sections 5, 6, 8.
+
+seed: 26143
+
+paths:
+  data_raw: data/raw
+  data_interim: data/interim
+  data_processed: data/processed
+  data_fixtures: data/fixtures
+  data_precomputed: data/precomputed
+  models: data/models
+
+detection:
+  model_repo: sahilvishwa2108/oil-spill-deeplab
+  model_local_dir: data/models/oil-spill-deeplab
+  input_size: [256, 256]
+  classes: ["background", "oil_spill", "ships", "look_alike", "wakes"]
+  render:
+    db_window: [-35, 0]     # fixed dB clip window, tune here not in code
+  tiling:
+    tile_size: 256
+    overlap_px: 48
+    land_skip_fraction: 0.9  # skip tiles more than this fraction land/nodata
+  polygonize:
+    min_area_km2: 0.01
+
+wind_gate:
+  wind_min_ms: 2.5
+  wind_max_ms: 11.0
+  downgrade_margin_ms: 1.0
+
+hindcast:
+  backend: opendrift_openoil
+  n_members_full: 30
+  n_members_live_demo: 8
+  backward_horizon_hours: 48
+  wind_drift_factor_mean: 0.03
+  wind_drift_factor_range: [0.02, 0.04]
+  current_perturbation_magnitude: 0.05
+  horizontal_diffusivity_range: [1.0, 10.0]
+  seed_time_jitter_minutes: 30
+  field:
+    grid_resolution_deg: 0.02
+    time_step_minutes: 30
+    gaussian_bandwidth_deg: 0.03
+
+ais:
+  dark_gap_min_minutes: 20
+  max_plausible_speed_kn: 30
+
+demo_mode: offline

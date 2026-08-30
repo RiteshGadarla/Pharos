@@ -1,0 +1,70 @@
+# Evidence scoring weights and thresholds. See PLAN.md section 10.
+#
+# Weighted sum in log-odds space. Weights are relative, not probabilities.
+# F6 (vessel_plausibility) downweights only. It must never be able to
+# eliminate a vessel on its own: keep its weight small relative to the
+# others and never wire it into scoring/eliminate.py.
+
+factors:
+  field_integral:
+    label: "F1: field integral"
+    weight: 3.0
+    description: >
+      Integral of the origin probability field along the vessel's
+      reconstructed track, normalised 0-1 across candidate vessels.
+
+  dark_overlap:
+    label: "F2: dark overlap"
+    weight: 2.5
+    description: >
+      Fraction of the origin window the vessel was dark while its
+      dead-reckoned envelope overlapped non-zero probability mass,
+      weighted by the mass overlapped.
+
+  axis_alignment:
+    label: "F3: axis alignment"
+    weight: 1.5
+    description: >
+      Angular agreement, modulo 180 degrees, between the slick's major
+      axis and the vessel's course over ground while inside the field.
+
+  speed_anomaly:
+    label: "F4: speed anomaly"
+    weight: 1.0
+    description: >
+      Sustained deviation below the vessel's own median transit speed
+      while inside the field.
+
+  course_anomaly:
+    label: "F5: course anomaly"
+    weight: 0.75
+    description: >
+      Deviation from the lane baseline, or a significant course change
+      immediately after the origin window.
+
+  vessel_plausibility:
+    label: "F6: vessel plausibility"
+    weight: 0.25
+    description: >
+      Small prior by vessel type and size. Downweights only, never
+      eliminates. Kept low deliberately: attributing pollution by vessel
+      class alone is exactly the shortcut a jury should attack.
+
+elimination:
+  # Applied before scoring. Nothing here may fire from vessel_plausibility.
+  no_temporal_overlap:
+    rule: NO_TEMPORAL_OVERLAP
+    reason: "This vessel had no recorded position anywhere in the origin field's time window."
+  no_spatial_support:
+    eps: 1.0e-6
+    rule: NO_SPATIAL_SUPPORT
+    reason: "This vessel's track and dark-period envelope never entered a region of non-negligible origin probability."
+  insufficient_track:
+    min_pings: 3
+    rule: INSUFFICIENT_TRACK
+    reason: "Fewer than the minimum number of AIS pings were recorded in the window, so the reconstructed track is not reliable enough to score."
+
+dark_gap:
+  min_duration_minutes: 20
+
+seed: 26143

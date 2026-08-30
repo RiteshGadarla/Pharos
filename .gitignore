@@ -1,0 +1,26 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
+dist/
+build/
+*.egg-info/
+
+# data, keep placeholders and fixtures only
+data/raw/*
+!data/raw/.gitkeep
+data/interim/*
+!data/interim/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/precomputed/*
+!data/precomputed/.gitkeep
+!data/precomputed/hero_sequence.json
+
+.env
+*.log
+.DS_Store
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

@@ -1,0 +1,54 @@
+services:
+  db:
+    image: timescale/timescaledb-ha:pg16-all
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-slicktrace}
+      POSTGRES_USER: ${POSTGRES_USER:-slicktrace}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/home/postgres/pgdata/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-slicktrace}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  detection:
+    build:
+      context: ./services/detection
+    environment:
+      DEMO_MODE: ${DEMO_MODE:-offline}
+    volumes:
+      - ./services/detection:/app/services/detection
+      - ./tests:/app/tests
+      - ./config:/app/config
+      - ./data:/app/data
+    ports:
+      - "8001:8001"
+
+  core:
+    build:
+      context: ./services/core
+    environment:
+      DEMO_MODE: ${DEMO_MODE:-offline}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-slicktrace}
+      POSTGRES_USER: ${POSTGRES_USER:-slicktrace}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./services/core:/app/services/core
+      - ./tests:/app/tests
+      - ./config:/app/config
+      - ./data:/app/data
+    ports:
+      - "8000:8000"
+
+volumes:
+  db_data:
