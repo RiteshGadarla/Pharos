@@ -12,7 +12,7 @@ test-core:
 	docker compose run --rm core pytest -q /app/tests /app/services/core
 
 test-detection:
-	docker compose run --rm detection pytest -q /app/tests /app/services/detection
+	docker compose run --rm detection pytest -q /app/services/detection
 
 fetch-data:
 	bash scripts/fetch_data.sh

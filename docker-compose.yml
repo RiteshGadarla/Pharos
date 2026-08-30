@@ -23,7 +23,6 @@ services:
       DEMO_MODE: ${DEMO_MODE:-offline}
     volumes:
       - ./services/detection:/app/services/detection
-      - ./tests:/app/tests
       - ./config:/app/config
       - ./data:/app/data
     ports:
