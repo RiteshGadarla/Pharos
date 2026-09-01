@@ -37,13 +37,25 @@ hindcast:
   backward_horizon_hours: 48
   wind_drift_factor_mean: 0.03
   wind_drift_factor_range: [0.02, 0.04]
-  current_perturbation_magnitude: 0.05
+  # Surface current error the ensemble samples, m/s. Sampled per member,
+  # not fixed: CMEMS surface currents validate against drifters at
+  # roughly 0.1 m/s RMSE, and over a 48 hour backward run that error is
+  # what dominates where the slick came from.
+  current_perturbation_range: [0.05, 0.15]
+  # Horizontal eddy diffusivity, m^2/s. Okubo's diffusion diagram puts
+  # this near 0.6 at 1 km and 8 at 10 km, which is the scale a slick
+  # drifts over in a day or two, so this range is the physical one. It is
+  # deliberately not inflated to make the probability cloud look bigger.
   horizontal_diffusivity_range: [1.0, 10.0]
   seed_time_jitter_minutes: 30
   field:
-    grid_resolution_deg: 0.02
+    grid_resolution_deg: 0.01
     time_step_minutes: 30
-    gaussian_bandwidth_deg: 0.03
+    # Spatial smoothing kernel. Keep it well under the ensemble's own
+    # spread near acquisition (a few hundred metres), or the kernel
+    # invents uncertainty the ensemble never produced and the field stops
+    # shrinking as the scrubber approaches the acquisition time.
+    gaussian_bandwidth_deg: 0.008
 
 ais:
   dark_gap_min_minutes: 20

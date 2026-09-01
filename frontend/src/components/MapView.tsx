@@ -6,13 +6,12 @@ import { scalePow } from "d3-scale";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Bounds,
-  fieldMaxProb,
   overallBounds,
   padBounds,
   positionAt,
   trackSegments,
 } from "../lib/geo";
-import { fieldRasterBounds, fieldSliceToCanvas } from "../lib/fieldRaster";
+import { fieldRasterBounds, fieldSliceMax, fieldSliceToCanvas } from "../lib/fieldRaster";
 import { buildGraticule } from "../lib/graticule";
 import { COLORS, hexToRgb } from "../lib/tokens";
 import type { DemoBundle, VesselJSON } from "../types";
@@ -84,15 +83,19 @@ export default function MapView({
   const [sceneImageSrc, setSceneImageSrc] = useState<string | null>(null);
 
   const extent = useMemo(() => padBounds(overallBounds(bundle), 0.1), [bundle]);
-  const maxProb = useMemo(() => fieldMaxProb(bundle.origin_field), [bundle.origin_field]);
+  // Normalised against this slice's own peak, not the whole volume's.
+  // See fieldSliceMax for why, and for what the UI does to keep that
+  // choice from hiding the drop in density it trades away.
+  //
   // Compressed so the low-mass tail of the distribution stays visible
   // instead of being crushed to nothing by the peak, but not as hard as
   // a square root, which lifts the tail enough to wash the SAR scene
   // orange from edge to edge. Capped well below opaque for the same
   // reason: the field sits over the scene and has to let it through.
+  const sliceMax = useMemo(() => fieldSliceMax(bundle.origin_field, timeIndex), [bundle.origin_field, timeIndex]);
   const alphaScale = useMemo(
-    () => scalePow().exponent(0.7).domain([0, maxProb]).range([0, 165]).clamp(true),
-    [maxProb],
+    () => scalePow().exponent(0.7).domain([0, sliceMax || 1]).range([0, 165]).clamp(true),
+    [sliceMax],
   );
   const graticule = useMemo(() => buildGraticule(extent, viewBounds), [extent, viewBounds]);
   const fieldCanvas = useMemo(

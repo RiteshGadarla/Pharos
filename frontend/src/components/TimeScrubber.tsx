@@ -3,6 +3,7 @@ interface Props {
   timeIndex: number;
   playing: boolean;
   acquiredAt: string;
+  spreadKm: number;
   onChangeIndex: (i: number) => void;
   onTogglePlay: () => void;
 }
@@ -12,6 +13,7 @@ export default function TimeScrubber({
   timeIndex,
   playing,
   acquiredAt,
+  spreadKm,
   onChangeIndex,
   onTogglePlay,
 }: Props) {
@@ -23,10 +25,10 @@ export default function TimeScrubber({
       <button
         className="scrubber-play"
         onClick={onTogglePlay}
-        title={playing ? "Pause the sweep." : "Sweep through the origin window."}
-        aria-label={playing ? "Pause" : "Play"}
+        title={playing ? "Pause the rewind." : "Rewind backwards from the acquisition time."}
+        aria-label={playing ? "Pause" : "Rewind"}
       >
-        {playing ? "❚❚" : "▶"}
+        {playing ? "❚❚" : "◀◀"}
       </button>
       <span className="scrubber-bound">{formatUtc(times[0])}</span>
       <div className="scrubber-track">
@@ -47,6 +49,16 @@ export default function TimeScrubber({
         </div>
       </div>
       <span className="scrubber-bound">{formatUtc(times[times.length - 1])}</span>
+      {/* The colour ramp is normalised per timestep so the field's shape
+          stays readable as it spreads, which means the eye cannot judge
+          how much certainty was lost. This says it as a number. */}
+      <div
+        className="scrubber-spread"
+        title="Mass-weighted spread of the origin probability field at this instant. It grows as the hindcast runs backwards and knowledge runs out."
+      >
+        <span className="scrubber-spread-label">ORIGIN SPREAD</span>
+        <span className="mono scrubber-spread-value">{spreadKm.toFixed(1)} km</span>
+      </div>
       <div className="scrubber-readout">
         <span className="scrubber-current mono">{formatUtc(current)} UTC</span>
         {/* The absolute time alone does not tell a room how far back

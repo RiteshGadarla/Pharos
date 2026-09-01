@@ -48,24 +48,22 @@ SCENE_PREVIEW_OUT_PATH = "data/precomputed/scene_preview.png"
 SCENE_ID = "SLICKTRACE-DEMO-0001"
 ACQUIRED_AT = datetime.datetime(2026, 1, 15, 2, 30)
 
-# Hindcast run kept small deliberately: this is a demo precompute, not the
-# full 30-member run (that's what the "reduced live" hindcast button in the
-# UI is for, PLAN.md section 15). Same shape as
-# scripts/make_fixture_origin_field.py so the field stays a similar size.
-HINDCAST_OVERRIDES = {
-    "n_members_full": 8,
-    "particles_per_member": 30,
-    "backward_horizon_hours": 6,
-    "wind_drift_factor_range": [0.02, 0.04],
-    "current_perturbation_magnitude": 0.05,
-    "horizontal_diffusivity_range": [1.0, 10.0],
-    "seed_time_jitter_minutes": 15,
-    "field": {
-        "grid_resolution_deg": 0.01,
-        "time_step_minutes": 20,
-        "gaussian_bandwidth_deg": 0.02,
-    },
-}
+# The demo precompute runs the hindcast exactly as config/pipeline.yaml
+# specifies it, with no overrides.
+#
+# It used to cut the run down to 8 members over a 6 hour horizon for
+# speed, and that quietly broke the thing the product is built around.
+# Over 6 hours the ensemble barely diverges, so the origin field came out
+# the same size at every timestep: scrubbing back from acquisition showed
+# a cloud that drifted but never grew, when the whole argument of PLAN.md
+# section 12's signature interaction is that it should bloom as you go
+# back and knowledge runs out. On the configured 48 hour horizon the
+# particle spread runs from 0.2 km at acquisition to 5.5 km two days
+# back, which is the behaviour the interaction depends on.
+#
+# The cost is a slower precompute, which is the right trade for a step
+# that runs once and is committed to a JSON file.
+HINDCAST_OVERRIDES: dict = {}
 
 AIS_CONFIG = {"dark_gap_min_minutes": 20, "max_plausible_speed_kn": 30}
 
@@ -128,7 +126,7 @@ def run_detection(pipeline_config: dict, scene_path: str, scene_id: str) -> list
 def build_hindcast_config(pipeline_config: dict) -> dict:
     hindcast_cfg = dict(pipeline_config["hindcast"])
     hindcast_cfg.update({k: v for k, v in HINDCAST_OVERRIDES.items() if k != "field"})
-    hindcast_cfg["field"] = {**hindcast_cfg.get("field", {}), **HINDCAST_OVERRIDES["field"]}
+    hindcast_cfg["field"] = {**hindcast_cfg.get("field", {}), **HINDCAST_OVERRIDES.get("field", {})}
     return {"seed": pipeline_config["seed"], "hindcast": hindcast_cfg}
 
 

@@ -33,18 +33,40 @@ class EnsembleMemberConfig:
     seed_time_jitter_minutes: float
 
 
+def current_uncertainty_range(hindcast_cfg: dict) -> tuple[float, float]:
+    """The range of surface current error the ensemble samples, in m/s.
+
+    Prefers `current_perturbation_range`. Falls back to the older scalar
+    `current_perturbation_magnitude`, which every member then shares.
+
+    Sampling this per member rather than fixing it matters. It is the
+    only one of the four perturbations that used to be held constant
+    across the ensemble, which meant the ensemble asserted it knew the
+    surface current error exactly while admitting uncertainty about wind
+    drift, diffusivity and acquisition time. For a surface slick the
+    current is the dominant forcing, so that was the wrong one to be
+    certain about, and it left the members far too tightly clustered.
+    """
+    if "current_perturbation_range" in hindcast_cfg:
+        lo, hi = hindcast_cfg["current_perturbation_range"]
+        return float(lo), float(hi)
+    magnitude = float(hindcast_cfg["current_perturbation_magnitude"])
+    return magnitude, magnitude
+
+
 def sample_member_configs(n_members: int, hindcast_cfg: dict, rng: np.random.Generator) -> list[EnsembleMemberConfig]:
     """Draws one perturbed parameter set per ensemble member, deterministic
     given rng's seeded state."""
     wind_lo, wind_hi = hindcast_cfg["wind_drift_factor_range"]
     diff_lo, diff_hi = hindcast_cfg["horizontal_diffusivity_range"]
+    current_lo, current_hi = current_uncertainty_range(hindcast_cfg)
     jitter_minutes = hindcast_cfg["seed_time_jitter_minutes"]
 
     return [
         EnsembleMemberConfig(
             member_seed=int(rng.integers(0, 2**31 - 1)),
             wind_drift_factor=float(rng.uniform(wind_lo, wind_hi)),
-            current_uncertainty_ms=float(hindcast_cfg["current_perturbation_magnitude"]),
+            current_uncertainty_ms=float(rng.uniform(current_lo, current_hi)),
             horizontal_diffusivity=float(rng.uniform(diff_lo, diff_hi)),
             seed_time_jitter_minutes=float(rng.uniform(-jitter_minutes, jitter_minutes)),
         )

@@ -25,6 +25,12 @@ from services.core.schemas import AISPoint, AISTrack
 
 Waypoint = tuple[float, float, datetime.datetime]  # lat, lon, time
 
+KM_PER_DEG = 111.0
+KM_PER_NM = 1.852
+# Plausible loaded merchant transit speed, used to size the synthetic
+# tracks' leg durations from their geometry.
+TRANSIT_SPEED_KN = 11.0
+
 
 def field_peak(field_ds: xr.Dataset) -> tuple[float, float, datetime.datetime]:
     """Returns (lat, lon, time) of the origin field's single highest-mass
@@ -38,6 +44,36 @@ def field_peak(field_ds: xr.Dataset) -> tuple[float, float, datetime.datetime]:
     lon = float(field_ds["lon"].values[xi])
     time = pd.Timestamp(field_ds["time"].values[ti]).to_pydatetime()
     return lat, lon, time
+
+
+def field_support_deg(field_ds: xr.Dataset, at_time: datetime.datetime) -> float:
+    """Characteristic spatial spread of the field at one timestep, in
+    degrees: the mass-weighted RMS distance of that slice from its own
+    centroid.
+
+    This is what "spatially close" has to be measured against. The grid's
+    extent is not a substitute: the grid is sized to hold every particle
+    from every member across the whole backward horizon, while the mass
+    at any one timestep sits in a small part of it. Placing the close
+    hard negative at a fraction of the grid span put it several spreads
+    off the mass, where the field is effectively zero, so it was
+    eliminated for no spatial support instead of being scored.
+    """
+    prob = field_ds["probability"]
+    ti = int(np.abs(field_ds["time"].values - np.datetime64(at_time)).argmin())
+    slice_ = prob.values[ti]
+    mass = slice_.sum()
+    if mass <= 0:
+        return 0.0
+
+    weights = slice_ / mass
+    lat = field_ds["lat"].values
+    lon = field_ds["lon"].values
+    lon_grid, lat_grid = np.meshgrid(lon, lat)
+    centre_lat = float((weights * lat_grid).sum())
+    centre_lon = float((weights * lon_grid).sum())
+    variance = float((weights * ((lat_grid - centre_lat) ** 2 + (lon_grid - centre_lon) ** 2)).sum())
+    return float(np.sqrt(variance))
 
 
 def field_time_bounds(field_ds: xr.Dataset) -> tuple[datetime.datetime, datetime.datetime]:
@@ -143,8 +179,28 @@ def generate_demo_scenario(
 
     lat_span = float(field_ds["lat"].values.max() - field_ds["lat"].values.min())
     lon_span = float(field_ds["lon"].values.max() - field_ds["lon"].values.min())
-    offset = max(lat_span, lon_span) * 1.5 + 0.05
-    leg = datetime.timedelta(hours=1)
+    max_span = max(lat_span, lon_span)
+
+    # How far out the tracks start, and how far apart the hard negatives
+    # sit. Both scale with the field, since a field twice as wide needs
+    # vessels that run twice as far to cross it, with a floor so a narrow
+    # field still produces tracks long enough to see.
+    offset = max(0.25, max_span * 0.9)
+    # The "spatially close" hard negative passes this far from the peak.
+    # Measured in the field's own spread, so it stays inside the mass at
+    # any horizon, and far enough out to be a distinct track on screen
+    # rather than sitting on top of the culprit.
+    close_offset = field_support_deg(field_ds, peak_time) * 1.5
+    far_offset = max(1.0, max_span * 3.0)
+
+    # Leg duration is derived from the geometry and a plausible transit
+    # speed, not fixed. It used to be one hour regardless, while the
+    # geometry scaled off the field's grid span, so widening the field
+    # silently accelerated every synthetic vessel: on a 48 hour backward
+    # horizon they exceeded 35 knots, which is not traffic any scoring
+    # engine should be asked to treat as ordinary.
+    leg_km = float(np.hypot(offset, offset)) * KM_PER_DEG
+    leg = datetime.timedelta(hours=leg_km / (TRANSIT_SPEED_KN * KM_PER_NM))
 
     tracks = []
 
@@ -178,7 +234,7 @@ def generate_demo_scenario(
         )
     )
 
-    far_lat, far_lon = peak_lat + offset * 8, peak_lon + offset * 8
+    far_lat, far_lon = peak_lat + far_offset, peak_lon + far_offset
     far_waypoints: list[Waypoint] = [
         (far_lat - offset, far_lon - offset, peak_time - leg),
         (far_lat, far_lon, peak_time),
@@ -192,10 +248,13 @@ def generate_demo_scenario(
         )
     )
 
+    # Passes through the field's mass at the peak time, like the culprit,
+    # but at steady transit speed and without ever going dark. This is
+    # the negative that stops "was near the origin" alone from convicting.
     constant_speed_waypoints: list[Waypoint] = [
-        (peak_lat - offset, peak_lon + offset, peak_time - leg),
-        (peak_lat, peak_lon + offset * 0.2, peak_time),
-        (peak_lat + offset, peak_lon + offset * 0.4, peak_time + leg),
+        (peak_lat - offset, peak_lon + close_offset + offset, peak_time - leg),
+        (peak_lat, peak_lon + close_offset, peak_time),
+        (peak_lat + offset, peak_lon + close_offset + offset, peak_time + leg),
     ]
     tracks.append(
         build_track(

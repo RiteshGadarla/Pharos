@@ -50,6 +50,68 @@ export function fieldSliceToCanvas(
   return canvas;
 }
 
+// Peak probability within one time slice.
+//
+// The colour ramp is normalised against this rather than against the
+// whole volume's maximum, and that choice needs stating because it
+// trades one true thing for another. Going back from acquisition the
+// same probability mass covers steadily more ground, so its peak
+// density falls by more than an order of magnitude. Normalised globally,
+// the early field renders as almost nothing: the display would say
+// "little is known here" by fading out, which reads as "there is
+// nothing here". Per slice, every timestep shows the shape of the
+// distribution at full contrast and the cloud visibly grows.
+//
+// What that hides is the fall in density itself, so the UI puts the
+// slice's spread on screen in kilometres next to the scrubber. The
+// growing uncertainty is then a number that is read, not an inference
+// from how faint a blob looks on a projector.
+export function fieldSliceMax(field: OriginFieldJSON, timeIndex: number): number {
+  const slice = field.grid[timeIndex];
+  if (!slice) return 0;
+  let max = 0;
+  for (const row of slice) {
+    for (const v of row) if (v > max) max = v;
+  }
+  return max;
+}
+
+const KM_PER_DEG = 111.0;
+
+// Mass-weighted RMS distance of a slice from its own centroid, in km:
+// how wide the origin field is at this instant.
+export function fieldSliceSpreadKm(field: OriginFieldJSON, timeIndex: number): number {
+  const slice = field.grid[timeIndex];
+  if (!slice) return 0;
+
+  let mass = 0;
+  let sumLat = 0;
+  let sumLon = 0;
+  for (let yi = 0; yi < field.lat.length; yi++) {
+    for (let xi = 0; xi < field.lon.length; xi++) {
+      const p = slice[yi][xi];
+      mass += p;
+      sumLat += p * field.lat[yi];
+      sumLon += p * field.lon[xi];
+    }
+  }
+  if (mass <= 0) return 0;
+
+  const centreLat = sumLat / mass;
+  const centreLon = sumLon / mass;
+  const lonScale = KM_PER_DEG * Math.cos((centreLat * Math.PI) / 180);
+
+  let variance = 0;
+  for (let yi = 0; yi < field.lat.length; yi++) {
+    const dy = (field.lat[yi] - centreLat) * KM_PER_DEG;
+    for (let xi = 0; xi < field.lon.length; xi++) {
+      const dx = (field.lon[xi] - centreLon) * lonScale;
+      variance += (slice[yi][xi] / mass) * (dx * dx + dy * dy);
+    }
+  }
+  return Math.sqrt(variance);
+}
+
 // Outer edges of the field's cells: the lat/lon arrays are cell centres,
 // so the raster extends half a step past each end.
 export function fieldRasterBounds(field: OriginFieldJSON): [number, number, number, number] {

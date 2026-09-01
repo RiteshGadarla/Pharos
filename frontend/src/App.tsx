@@ -12,6 +12,7 @@ import ViewPresets from "./components/ViewPresets";
 import { useViewPresets, type ViewKey } from "./lib/views";
 import type { DemoBundle } from "./types";
 import { isDarkAt } from "./lib/geo";
+import { fieldSliceSpreadKm } from "./lib/fieldRaster";
 import "./App.css";
 
 type RightTab = "suspects" | "eliminations";
@@ -42,10 +43,23 @@ export default function App() {
   return <Console bundle={bundle} />;
 }
 
+// How long one full sweep of the origin window should take, whatever
+// the backward horizon works out to in timesteps. Pinned to a duration
+// rather than a per-step delay: the field has 98 steps on a 48 hour
+// horizon, and a fixed 400 ms step made that a 39 second wait.
+const SWEEP_DURATION_MS = 16000;
+const MIN_STEP_MS = 60;
+
 // Split from App so every hook below can assume a loaded bundle. Putting
 // them in App would put hook calls after the loading and error returns.
 function Console({ bundle }: { bundle: DemoBundle }) {
-  const [timeIndex, setTimeIndex] = useState(0);
+  // Opens at the acquisition time, the newest step, because that is
+  // where the evidence starts: this is the slick, this is when we saw
+  // it. Play then runs backwards from there (PLAN.md section 12,
+  // "Signature element"), so the probability cloud blooms as the
+  // hindcast runs out of knowledge rather than collapsing into it.
+  const lastIndex = bundle.origin_field.time.length - 1;
+  const [timeIndex, setTimeIndex] = useState(lastIndex);
   const [playing, setPlaying] = useState(false);
   const [toggles, setToggles] = useState<Toggles>({
     scene: true,
@@ -67,9 +81,12 @@ function Console({ bundle }: { bundle: DemoBundle }) {
 
   useEffect(() => {
     if (!playing) return;
+    const steps = bundle.origin_field.time.length;
+    const stepMs = Math.max(MIN_STEP_MS, SWEEP_DURATION_MS / steps);
     intervalRef.current = window.setInterval(() => {
-      setTimeIndex((i) => (i + 1) % bundle.origin_field.time.length);
-    }, 400);
+      // Backwards, wrapping round to the acquisition time.
+      setTimeIndex((i) => (i === 0 ? steps - 1 : i - 1));
+    }, stepMs);
     return () => {
       if (intervalRef.current) window.clearInterval(intervalRef.current);
     };
@@ -77,6 +94,10 @@ function Console({ bundle }: { bundle: DemoBundle }) {
 
   const timeMs = new Date(bundle.origin_field.time[timeIndex]).getTime();
   const darkNow = bundle.vessels.filter((v) => isDarkAt(v, timeMs));
+  const spreadKm = useMemo(
+    () => fieldSliceSpreadKm(bundle.origin_field, timeIndex),
+    [bundle.origin_field, timeIndex],
+  );
 
   const focusVessel = (mmsi: string) => {
     setSelectedMmsi(mmsi);
@@ -142,6 +163,7 @@ function Console({ bundle }: { bundle: DemoBundle }) {
         timeIndex={timeIndex}
         playing={playing}
         acquiredAt={bundle.scene.acquired_at}
+        spreadKm={spreadKm}
         onChangeIndex={(i) => {
           setPlaying(false);
           setTimeIndex(i);

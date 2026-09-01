@@ -26,6 +26,14 @@ DEFAULT_VESSEL_PLAUSIBILITY = {
 }
 DEFAULT_PLAUSIBILITY_FALLBACK = 0.5
 
+# What a log-odds-combined factor returns when it genuinely cannot be
+# computed for a vessel. It has to be 0.5, since scoring/engine.py runs
+# these through a logit and logit(0.5) is 0: absent evidence must add
+# nothing. Returning 0.0 instead reads as the strongest possible
+# evidence against, which is a different claim entirely and not one a
+# missing measurement can support.
+NEUTRAL_FACTOR = 0.5
+
 
 def sample_field_at(field_ds: xr.Dataset, lat: float, lon: float, time: datetime.datetime) -> float:
     """Nearest-neighbour probability at (lat, lon, time). Nearest, not
@@ -131,18 +139,35 @@ def compute_speed_anomaly(track: AISTrack, field_ds: xr.Dataset) -> float:
 
 
 def compute_course_anomaly(track: AISTrack, field_ds: xr.Dataset) -> float:
-    """F5: how much the vessel's course changed from just before the
-    field's time window to just after it, 0-1 scaled by 180 degrees."""
+    """F5: how much the vessel's course changed across its passage
+    through the field's time window, 0-1 scaled by 180 degrees.
+
+    Sampled at the ends of the overlap between the track and the window,
+    not at the window's own edges. The window is as long as the backward
+    horizon (two days) while a track is hours, so the window's edges are
+    usually nowhere near the vessel and asking for a course there
+    returns nothing. That is how this used to fail: it returned the
+    0.0 "could not compute" sentinel for every vessel, and since F5 is
+    combined in log-odds space, 0.0 is not neutral but the most extreme
+    value the scale has. Every vessel picked up an identical large
+    negative contribution, which drowned the factors that actually
+    separate them.
+    """
     import pandas as pd
 
     times = field_ds["time"].values
-    t_min = pd.Timestamp(times.min()).to_pydatetime()
-    t_max = pd.Timestamp(times.max()).to_pydatetime()
+    field_t_min = pd.Timestamp(times.min()).to_pydatetime()
+    field_t_max = pd.Timestamp(times.max()).to_pydatetime()
 
-    before = course_and_speed_at(track, t_min)
-    after = course_and_speed_at(track, t_max)
+    t_before = max(field_t_min, track.points[0].ts) if track.points else field_t_min
+    t_after = min(field_t_max, track.points[-1].ts) if track.points else field_t_max
+    if t_after <= t_before:
+        return NEUTRAL_FACTOR
+
+    before = course_and_speed_at(track, t_before)
+    after = course_and_speed_at(track, t_after)
     if before is None or after is None:
-        return 0.0
+        return NEUTRAL_FACTOR
     cog_before, _ = before
     cog_after, _ = after
     delta = abs(((cog_after - cog_before + 180) % 360) - 180)

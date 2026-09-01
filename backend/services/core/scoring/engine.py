@@ -26,7 +26,19 @@ import math
 from services.core.schemas import AISTrack, SlickFeatures, SuspectScore
 from services.core.scoring.factors import compute_all_factors
 
-LOGIT_EPS = 1e-6
+# Clamp on the logit's input, which bounds how much any one factor can
+# move the total: logit(0.05) is about -2.94, so a single factor tops out
+# near a 19:1 likelihood ratio either way.
+#
+# This was 1e-6, which allowed +/- 13.8, a million to one. No soft
+# behavioural factor supports a claim that strong, and in practice the
+# bound was reached constantly, because F3 to F5 legitimately return 0.0
+# when they find nothing. A vessel that simply never slowed down scored
+# logit(0) on F4 and picked up -13.8, which buried every real positive
+# signal the other factors found and let "no evidence here" outrank
+# "clear evidence there". Absence of evidence has to stay near neutral,
+# and no one factor should be able to decide the ranking by itself.
+LOGIT_EPS = 0.05
 
 FACTOR_PHRASES = {
     "field_integral": "its track passes through the highest-probability part of the origin field",
@@ -45,11 +57,19 @@ def _logit(p: float) -> float:
 
 
 
+# Smallest contribution the narrative will describe in words. Below
+# this a factor is not evidence, it is rounding, and the phrases in
+# FACTOR_PHRASES are far too confident for it: a field_integral
+# contribution of 0.0004 would otherwise be read out as "its track
+# passes through the highest-probability part of the origin field".
+NARRATIVE_MIN_CONTRIBUTION = 0.05
+
+
 def build_narrative(factor_contributions: dict[str, float], rank: int) -> str:
     """Templates the top contributing factors into a plain-language
     paragraph. Active voice, no jargon, per PLAN.md section 10."""
     ranked = sorted(factor_contributions.items(), key=lambda kv: kv[1], reverse=True)
-    top = [name for name, value in ranked[:3] if value > 0]
+    top = [name for name, value in ranked[:3] if value >= NARRATIVE_MIN_CONTRIBUTION]
     if not top:
         return f"This vessel is ranked {rank}. No single factor stands out; the ranking reflects a broad combination of weak evidence."
     phrases = [FACTOR_PHRASES.get(name, name) for name in top]
