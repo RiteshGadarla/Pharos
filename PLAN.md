@@ -2,7 +2,7 @@
 
 Build plan for **SLICKTRACE**, an oil spill attribution pipeline.
 Target: Smart India Hackathon, NTRO Problem Statement 26143.
-Audience for this document: Claude Code. Read the whole file before writing any code.
+Read the whole file before writing any code.
 
 ---
 
@@ -22,7 +22,7 @@ Read these as hard constraints, not preferences.
 2. **Every eliminated vessel gets a logged reason string.** The elimination log is a first-class output, not a debug artifact. The PS text explicitly asks for irrelevant traffic to be filtered out, so the filter has to be inspectable.
 3. **Scoring is an explicit weighted evidence model with named factors, defined in a YAML config.** Do not train a classifier for attribution. There is no ground truth, and a black box cannot be defended to a jury or a court.
 4. **AIS dark periods raise suspicion, they never drop a vessel.** A vessel that stops transmitting while inside the origin envelope is scored up. This is the inversion the whole idea rests on.
-5. **The demo must run with the network cable unplugged.** Every external dataset is downloaded ahead of time into `data/`, and there is an offline fixture path for every stage.
+5. **The demo must run with the network cable unplugged.** Every external dataset is downloaded ahead of time into `backend/data/`, and there is an offline fixture path for every stage.
 6. **Determinism.** Every stochastic component takes a seed from config. Two runs of the demo produce identical numbers.
 7. **No em dashes in any user-facing string, README, report text, or UI copy.**
 
@@ -47,69 +47,72 @@ Do not build these. If you find yourself building one, stop.
 slicktrace/
   README.md
   PLAN.md
-  Makefile
-  docker-compose.yml
-  .env.example
-  config/
-    scoring.yaml            # evidence factor weights, thresholds
-    pipeline.yaml            # tiling, ensemble size, seeds, paths
-    demo.yaml                # the hero scenario definition
-  data/                     # gitignored except .gitkeep and fixtures/
-    raw/                    # Sentinel-1 GRD, NetCDF forcing, AIS CSV
-    interim/
-    processed/
-    fixtures/               # small committed samples for tests
-    precomputed/            # demo artifacts, committed if small enough
-  services/
-    detection/              # TensorFlow, isolated env
-      Dockerfile
-      requirements.txt
-      app.py                # FastAPI
-      render.py             # SAR to model-input rendering
-      tiling.py
-      infer.py
-      polygonize.py
-      eval.py
-    core/                   # everything else, one env
-      Dockerfile
-      requirements.txt
-      app.py                # FastAPI, orchestration
-      worker.py             # Celery
-      gate/wind.py
-      characterize/geometry.py
-      characterize/age.py
-      hindcast/ensemble.py
-      hindcast/field.py
-      ais/ingest.py
-      ais/synthetic.py
-      ais/tracks.py
-      ais/darkgaps.py
-      scoring/factors.py
-      scoring/engine.py
-      scoring/eliminate.py
-      forecast/forward.py
-      dossier/render.py
-      validation/harness.py
-      schemas.py            # pydantic models, the contracts in section 4
-      db/models.py
-      db/migrations/
+  Makefile                  # delegates to backend/Makefile
+  backend/
+    Makefile
+    docker-compose.yml
+    pytest.ini
+    .env.example
+    config/
+      scoring.yaml            # evidence factor weights, thresholds
+      pipeline.yaml            # tiling, ensemble size, seeds, paths
+      demo.yaml                # the hero scenario definition
+    data/                     # gitignored except .gitkeep and fixtures/
+      raw/                    # Sentinel-1 GRD, NetCDF forcing, AIS CSV
+      interim/
+      processed/
+      fixtures/               # small committed samples for tests
+      precomputed/            # demo artifacts, committed if small enough
+    services/
+      detection/              # TensorFlow, isolated env
+        Dockerfile
+        requirements.txt
+        app.py                # FastAPI
+        render.py             # SAR to model-input rendering
+        tiling.py
+        infer.py
+        polygonize.py
+        eval.py
+      core/                   # everything else, one env
+        Dockerfile
+        requirements.txt
+        app.py                # FastAPI, orchestration
+        worker.py             # Celery
+        gate/wind.py
+        characterize/geometry.py
+        characterize/age.py
+        hindcast/ensemble.py
+        hindcast/field.py
+        ais/ingest.py
+        ais/synthetic.py
+        ais/tracks.py
+        ais/darkgaps.py
+        scoring/factors.py
+        scoring/engine.py
+        scoring/eliminate.py
+        forecast/forward.py
+        dossier/render.py
+        validation/harness.py
+        schemas.py            # pydantic models, the contracts in section 4
+        db/models.py
+        db/migrations/
+    tests/
+    scripts/
+      fetch_data.sh
+      seed_demo.py
+      run_validation.py
   frontend/
     src/
     package.json
-  tests/
-  scripts/
-    fetch_data.sh
-    seed_demo.py
-    run_validation.py
 ```
 
-Two Python environments, deliberately. TensorFlow lives alone in `services/detection`. Do not attempt to install TensorFlow, PyTorch, OpenDrift and GDAL in one environment during a hackathon.
+Two Python environments, deliberately. TensorFlow lives alone in `backend/services/detection`. Do not attempt to install TensorFlow, PyTorch, OpenDrift and GDAL in one environment during a hackathon.
 
 ---
 
 ## 4. Data contracts
 
-Define these as pydantic models in `services/core/schemas.py` **before writing any stage**. Every stage reads and writes these. Stages communicate through the database and object paths, never through in-memory coupling.
+Define these as pydantic models in `backend/services/core/schemas.py` **before writing any stage**. Every stage reads and writes these. Stages communicate through the database and object paths, never through in-memory coupling.
 
 ```python
 class SceneMeta:
@@ -187,7 +190,7 @@ class Elimination:
 
 ## 4A. Data acquisition: what is automatic and what a human must do first
 
-Two categories. **Blocking human actions** must be done by a person before any script works, because they involve account creation and approval latency. **Scripted** means `scripts/fetch_data.sh` can pull it unattended once credentials exist.
+Two categories. **Blocking human actions** must be done by a person before any script works, because they involve account creation and approval latency. **Scripted** means `backend/scripts/fetch_data.sh` can pull it unattended once credentials exist.
 
 ### Blocking human actions, do these before writing code
 
@@ -195,13 +198,13 @@ Two categories. **Blocking human actions** must be done by a person before any s
 2. **Register a Copernicus Marine account** at `marine.copernicus.eu`. Free. This unlocks ocean currents.
 3. **Register a Copernicus Climate Data Store account**, accept the ERA5 licence terms on the dataset page, and save the API key to `~/.cdsapirc`. The licence acceptance is a separate click from registration and is a common silent failure. **ERA5 requests queue and can take hours**, so submit the demo region request on day one, not on build day.
 4. **Obtain the oil spill segmentation dataset.** The 5-class dataset matching the model taxonomy is distributed by request or through a mirror, so it cannot be scripted blind. Get the actual download link in hand before starting P2, because P3 (the honest IoU number) is blocked on it.
-5. **Pick the hero incident** and record its date, bounding box and a source reference in `config/demo.yaml`. Everything downstream keys off this.
+5. **Pick the hero incident** and record its date, bounding box and a source reference in `backend/config/demo.yaml`. Everything downstream keys off this.
 
 ### Scripted, once credentials exist
 
 | Data | Source | Auth | Tool | Size | Notes |
 |---|---|---|---|---|---|
-| Segmentation model | HuggingFace `sahilvishwa2108/oil-spill-deeplab` | none | `huggingface_hub.hf_hub_download` | ~205 MB | Cache to `data/models/`, load from disk so the demo is offline |
+| Segmentation model | HuggingFace `sahilvishwa2108/oil-spill-deeplab` | none | `huggingface_hub.hf_hub_download` | ~205 MB | Cache to `backend/data/models/`, load from disk so the demo is offline |
 | Sentinel-1 GRD | ASF DAAC | Earthdata login | `asf_search` | ~1 GB per scene | Preferred route, see below |
 | Ocean currents | CMEMS Global Ocean Physics | Copernicus Marine login | `copernicusmarine subset` | tens of MB subsetted | Subset by bbox and time, no volume quota |
 | Wind | ERA5 single levels, 10 m U and V | CDS API key | `cdsapi` | small when subsetted | Queue delay, request early |
@@ -239,7 +242,7 @@ The plan's primary sources need accounts. Both have credential-free alternatives
 
 MarineCadastre files are US waters. You are demonstrating over Indian waters, so they are **not** the demo data. They are the statistical source: lane geometry, vessel type mix, speed distributions, ping intervals and dropout rates are fitted from real files and then used to generate the demo traffic, with only the incident injected. The database schema mirrors the MarineCadastre columns so a real ICG or satellite AIS feed drops in with no code change.
 
-`scripts/fetch_data.sh` must write a `data/raw/MANIFEST.json` recording, for every file, the source URL or dataset id, the retrieval timestamp, the byte size and the SHA-256. The dossier provenance page reads from this manifest, so the fetch step is part of the evidence chain, not a setup chore.
+`backend/scripts/fetch_data.sh` must write a `backend/data/raw/MANIFEST.json` recording, for every file, the source URL or dataset id, the retrieval timestamp, the byte size and the SHA-256. The dossier provenance page reads from this manifest, so the fetch step is part of the evidence chain, not a setup chore.
 
 ### Fetch script requirements
 
@@ -258,7 +261,7 @@ Use `sahilvishwa2108/oil-spill-deeplab` from HuggingFace. MIT licensed. DeepLabV
 
 - Input: `(256, 256, 3)`, RGB, values scaled to 0-1.
 - Output: `(256, 256, 5)`, classes in order **Background, Oil Spill, Ships, Look-alike, Wakes**.
-- Load with `keras.saving.load_model("hf://sahilvishwa2108/oil-spill-deeplab")`, or download the weights file once into `data/models/` and load from disk so the demo works offline. **Do the offline version.**
+- Load with `keras.saving.load_model("hf://sahilvishwa2108/oil-spill-deeplab")`, or download the weights file once into `backend/data/models/` and load from disk so the demo works offline. **Do the offline version.**
 - Verify the on-disk file extension on the Files tab before writing the loader. The model card says `.keras`, a sibling repo of the same author ships `.h5`. Handle whichever is actually there.
 
 ### The rendering trap, handle this first
@@ -369,7 +372,7 @@ PostgreSQL with PostGIS and TimescaleDB. Hypertable on the ping timestamp, GiST 
 - Then inject exactly one culprit: a vessel whose track crosses the high-probability region of the origin field, slows to a steady low speed, stops transmitting for a configurable dark period, and resumes on a different course.
 - Also inject at least three **hard negatives**: a vessel that passes through the field at the wrong time, a vessel with a dark gap far from the field, and a vessel spatially close throughout but at constant transit speed with no dark gap. If the scoring engine cannot separate the culprit from these three, the engine is wrong.
 
-Everything is seeded and reproducible from `config/demo.yaml`.
+Everything is seeded and reproducible from `backend/config/demo.yaml`.
 
 ### Track reconstruction
 
@@ -387,7 +390,7 @@ Everything is seeded and reproducible from `config/demo.yaml`.
 
 ## 10. Stage 7: evidence scoring, the USP
 
-`scoring/factors.py` computes named factors, `scoring/engine.py` combines them, `scoring/eliminate.py` produces the elimination log. All weights and thresholds live in `config/scoring.yaml` and are displayed in the UI and printed in the dossier.
+`scoring/factors.py` computes named factors, `scoring/engine.py` combines them, `scoring/eliminate.py` produces the elimination log. All weights and thresholds live in `backend/config/scoring.yaml` and are displayed in the UI and printed in the dossier.
 
 ### Factors
 
@@ -575,7 +578,7 @@ Guard rails: label the vertical axis in UTC, clearly, at least three ticks. An u
 - Target 60 fps at 1920x1080. Measure with the deck.gl stats overlay and keep a dev flag to display frame time.
 - Test on the actual presenting laptop, on battery, with an external display attached. GPU behaviour changes on all three axes and discovering that on stage is fatal.
 - Projectors crush contrast and thin lines. Set map line widths at least 2 px, treat anything below 30 percent alpha as invisible, and check the palette on a real projector before the event. Prefer raising line weight over raising saturation.
-- Precompute everything the sequence needs into a single JSON or binary bundle at `data/precomputed/hero_sequence.json`, loaded once at startup. No network calls, no worker jobs, no database queries during the animation.
+- Precompute everything the sequence needs into a single JSON or binary bundle at `backend/data/precomputed/hero_sequence.json`, loaded once at startup. No network calls, no worker jobs, no database queries during the animation.
 - Respect `prefers-reduced-motion` by disabling the ambient flow and shortening transitions, while keeping the rewind available on explicit click. Accessibility and the demo are not in conflict here.
 
 ### The fallback that you must build
@@ -597,12 +600,12 @@ Record a clean screen capture of the full rewind sequence and the space-time vie
 
 `validation/harness.py`. There is no ground truth for attribution, so build your own:
 
-1. Generate 50 synthetic incidents from `config/demo.yaml` with varied lane density, dark gap presence, backward horizon and wind conditions, each with a known culprit MMSI.
+1. Generate 50 synthetic incidents from `backend/config/demo.yaml` with varied lane density, dark gap presence, backward horizon and wind conditions, each with a known culprit MMSI.
 2. Run the full pipeline from stage 5 onward on each.
 3. Report **rank-1 accuracy**, **rank-3 accuracy**, mean rank of the true culprit, and a breakdown by traffic density.
 4. Run an ablation: rerun with `F2` (dark overlap) zeroed, and with `F1` replaced by distance to the field centroid. Report the accuracy drop for each.
 
-Those two ablation numbers are the strongest slide in the deck, because they prove the two USP claims quantitatively rather than asserting them. Print the table to stdout and write it to `data/processed/validation.md`.
+Those two ablation numbers are the strongest slide in the deck, because they prove the two USP claims quantitatively rather than asserting them. Print the table to stdout and write it to `backend/data/processed/validation.md`.
 
 State plainly in the output that this measures internal consistency of the scoring model, not real-world accuracy, and that validation against a documented prosecuted incident is the next step. Do not let the harness print a claim it cannot support.
 
@@ -640,7 +643,7 @@ Critical path first. Each phase has an acceptance test that must pass before mov
 
 ## 15. Precomputation and demo safety
 
-Before the demo, `scripts/seed_demo.py` must produce and commit to `data/precomputed/`:
+Before the demo, `backend/scripts/seed_demo.py` must produce and commit to `backend/data/precomputed/`:
 
 - Two fully preprocessed Sentinel-1 scenes, already terrain corrected and rendered.
 - Cached wind and current NetCDF subsets for the demo region and window.

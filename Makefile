@@ -1,24 +1,25 @@
 .PHONY: up down test test-core test-detection fetch-data seed-demo lint
 
 up:
-	docker compose up -d --build
+	$(MAKE) -C backend up
 
 down:
-	docker compose down
+	$(MAKE) -C backend down
 
-test: test-core test-detection
+test:
+	$(MAKE) -C backend test
 
 test-core:
-	docker compose run --rm core pytest -q /app/tests /app/services/core
+	$(MAKE) -C backend test-core
 
 test-detection:
-	docker compose run --rm detection pytest -q /app/services/detection
+	$(MAKE) -C backend test-detection
 
 fetch-data:
-	bash scripts/fetch_data.sh
+	$(MAKE) -C backend fetch-data
 
 seed-demo:
-	python3 scripts/seed_demo.py
+	$(MAKE) -C backend seed-demo
 
 lint:
-	docker compose run --rm core ruff check services/core
+	$(MAKE) -C backend lint

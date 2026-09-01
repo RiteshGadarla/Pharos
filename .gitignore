@@ -8,17 +8,17 @@ build/
 *.egg-info/
 
 # data, keep placeholders and fixtures only
-data/models/*
-!data/models/.gitkeep
-data/raw/*
-!data/raw/.gitkeep
-data/interim/*
-!data/interim/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
-data/precomputed/*
-!data/precomputed/.gitkeep
-!data/precomputed/hero_sequence.json
+backend/data/models/*
+!backend/data/models/.gitkeep
+backend/data/raw/*
+!backend/data/raw/.gitkeep
+backend/data/interim/*
+!backend/data/interim/.gitkeep
+backend/data/processed/*
+!backend/data/processed/.gitkeep
+backend/data/precomputed/*
+!backend/data/precomputed/.gitkeep
+!backend/data/precomputed/hero_sequence.json
 
 .env
 *.log

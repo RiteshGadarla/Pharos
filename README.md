@@ -13,7 +13,7 @@ See [PLAN.md](PLAN.md) for the full build plan, data contracts, non-negotiables 
 Build in progress, phase by phase, per the acceptance tests in PLAN.md section 14.
 
 - [x] P0: repo scaffold, Docker Compose, Makefile targets
-- [x] P1: data contracts in `services/core/schemas.py`, contract tests
+- [x] P1: data contracts in `backend/services/core/schemas.py`, contract tests
 - [x] P2: detection service (render, tile, infer, stitch, polygonize)
 - [ ] P3: evaluation, honest per-class IoU (deferred, blocked on the labeled dataset, see PLAN.md section 4A item 4)
 - [x] P4: wind physics gate, synthetic FP-reduction measurement
@@ -23,11 +23,11 @@ Build in progress, phase by phase, per the acceptance tests in PLAN.md section 1
 - [x] P8: scoring engine and elimination log
 - [ ] P9 onward: see PLAN.md section 14
 
-P2 was validated against a synthetic fixture scene (`scripts/make_fixture_scene.py`, `data/fixtures/synthetic_scene.tif`), not a real Sentinel-1 product, since Sentinel-1 access is blocked on the Earthdata account (PLAN.md section 4A). Swap in a real scene once that account exists; the pipeline itself does not change.
+P2 was validated against a synthetic fixture scene (`backend/scripts/make_fixture_scene.py`, `backend/data/fixtures/synthetic_scene.tif`), not a real Sentinel-1 product, since Sentinel-1 access is blocked on the Earthdata account (PLAN.md section 4A). Swap in a real scene once that account exists; the pipeline itself does not change.
 
 ## Repository layout
 
-See PLAN.md section 3 for the full layout and rationale for the two-environment split (`services/detection` for TensorFlow, `services/core` for everything else).
+The project is split into `backend/` (the Python services, tests, scripts, config and data) and `frontend/` (the operator console UI). See PLAN.md section 3 for the full layout and rationale for the two-environment split within the backend (`services/detection` for TensorFlow, `services/core` for everything else).
 
 ## Development
 
@@ -35,6 +35,8 @@ See PLAN.md section 3 for the full layout and rationale for the two-environment 
 make up      # start Postgres/PostGIS/Timescale and both services
 make test    # run the test suite
 ```
+
+These root-level targets delegate into `backend/Makefile`. Run them directly from `backend/` if you prefer.
 
 Absolute slick age in hours cannot be estimated reliably from a single SAR acquisition. This system reports a relative age band and states its reasoning, never a number in hours.
 
