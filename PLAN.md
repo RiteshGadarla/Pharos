@@ -50,7 +50,9 @@ slicktrace/
   Makefile                  # delegates to backend/Makefile
   backend/
     Makefile
-    docker-compose.yml
+    docker-compose.yml       # Postgres/PostGIS/Timescale only, see below
+    requirements.txt          # one env for the whole backend
+    .venv/                    # gitignored, `make venv` builds it
     pytest.ini
     .env.example
     config/
@@ -64,18 +66,14 @@ slicktrace/
       fixtures/               # small committed samples for tests
       precomputed/            # demo artifacts, committed if small enough
     services/
-      detection/              # TensorFlow, isolated env
-        Dockerfile
-        requirements.txt
+      detection/              # TensorFlow
         app.py                # FastAPI
         render.py             # SAR to model-input rendering
         tiling.py
         infer.py
         polygonize.py
         eval.py
-      core/                   # everything else, one env
-        Dockerfile
-        requirements.txt
+      core/                   # everything else
         app.py                # FastAPI, orchestration
         worker.py             # Celery
         gate/wind.py
@@ -106,7 +104,7 @@ slicktrace/
     package.json
 ```
 
-Two Python environments, deliberately. TensorFlow lives alone in `backend/services/detection`. Do not attempt to install TensorFlow, PyTorch, OpenDrift and GDAL in one environment during a hackathon.
+One Python environment for the whole backend (`backend/requirements.txt`, `backend/.venv`), covering both `services/core` and `services/detection`. Only Postgres/PostGIS/Timescale runs in Docker (`make up`); `services/core` and `services/detection` run locally against the shared venv (`make run-core`, `make run-detection`), against `localhost:5432` for the database.
 
 ---
 
@@ -617,7 +615,7 @@ Critical path first. Each phase has an acceptance test that must pass before mov
 
 | Phase | Deliverable | Acceptance test |
 |---|---|---|
-| P0 | Repo, Docker Compose, Postgres+PostGIS+Timescale up, both Python envs building, Makefile targets | `make up` then `make test` passes on an empty test suite |
+| P0 | Repo, Docker Compose (Postgres+PostGIS+Timescale only), backend venv building, Makefile targets | `make up` then `make test` passes on an empty test suite |
 | P1 | Schemas in `schemas.py` | Contract test: factors sum to total, round trips through JSON |
 | P2 | Detection service: render, tile, infer, stitch, polygonize | Given a GeoTIFF, returns a GeoJSON FeatureCollection of oil polygons with correct geographic coordinates |
 | P3 | `eval.py` per-class IoU table | Table printed with a real number attached to the oil class |

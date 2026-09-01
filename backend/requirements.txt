@@ -4,7 +4,7 @@ celery==5.4.0
 redis==5.2.1
 pydantic==2.10.4
 PyYAML==6.0.2
-numpy==2.2.1
+numpy==2.0.2
 shapely==2.0.6
 rasterio==1.4.3
 xarray==2024.11.0
@@ -15,5 +15,9 @@ psycopg[binary]==3.2.3
 SQLAlchemy==2.0.36
 GeoAlchemy2==0.16.0
 reportlab==4.2.5
-pytest==8.3.4
 httpx==0.28.1
+tensorflow==2.18.0
+keras==3.7.0
+huggingface_hub==0.27.0
+pytest==8.3.4
+ruff==0.8.4

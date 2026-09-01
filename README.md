@@ -27,16 +27,21 @@ P2 was validated against a synthetic fixture scene (`backend/scripts/make_fixtur
 
 ## Repository layout
 
-The project is split into `backend/` (the Python services, tests, scripts, config and data) and `frontend/` (the operator console UI). See PLAN.md section 3 for the full layout and rationale for the two-environment split within the backend (`services/detection` for TensorFlow, `services/core` for everything else).
+The project is split into `backend/` (the Python services, tests, scripts, config and data) and `frontend/` (the operator console UI). See PLAN.md section 3 for the full layout.
 
 ## Development
 
+Only Postgres/PostGIS/Timescale runs in Docker. `services/core` and `services/detection` share one Python environment (`backend/requirements.txt`, `backend/.venv`) and run locally.
+
 ```
-make up      # start Postgres/PostGIS/Timescale and both services
-make test    # run the test suite
+make venv           # build backend/.venv from backend/requirements.txt
+make up              # start Postgres/PostGIS/Timescale in Docker
+make run-core         # run services/core locally, http://localhost:8000
+make run-detection    # run services/detection locally, http://localhost:8001
+make test             # run the test suite locally
 ```
 
-These root-level targets delegate into `backend/Makefile`. Run them directly from `backend/` if you prefer.
+These root-level targets delegate into `backend/Makefile`. Run them directly from `backend/` if you prefer. Copy `backend/.env.example` to `backend/.env` first; `POSTGRES_HOST` points at `localhost` since the database is the only thing in Docker.
 
 Absolute slick age in hours cannot be estimated reliably from a single SAR acquisition. This system reports a relative age band and states its reasoning, never a number in hours.
 
