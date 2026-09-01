@@ -7,10 +7,12 @@ PyYAML==6.0.2
 numpy==2.0.2
 shapely==2.0.6
 rasterio==1.4.3
+Pillow==12.3.0
 xarray==2024.11.0
 scipy==1.14.1
 netCDF4==1.7.2
 opendrift==1.14.11
+matplotlib==3.11.1
 psycopg[binary]==3.2.3
 SQLAlchemy==2.0.36
 GeoAlchemy2==0.16.0

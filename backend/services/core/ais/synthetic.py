@@ -111,7 +111,9 @@ def build_track(
     return AISTrack(mmsi=mmsi, vessel_type=vessel_type, points=points, dark_gaps=dark_gaps)
 
 
-def generate_demo_scenario(field_ds: xr.Dataset, ais_config: dict, seed: int) -> list[AISTrack]:
+def generate_demo_scenario(
+    field_ds: xr.Dataset, ais_config: dict, seed: int, include_culprit_dark_gap: bool = True
+) -> list[AISTrack]:
     """Builds the culprit plus three hard negatives from PLAN.md section
     9, positioned relative to the origin field's peak so the scoring
     engine (P8) has something real to separate them on:
@@ -124,6 +126,13 @@ def generate_demo_scenario(field_ds: xr.Dataset, ais_config: dict, seed: int) ->
       far from the field's spatial support.
     - constant_speed_close: spatially close throughout the field's time
       window, but at constant transit speed with no dark gap.
+
+    include_culprit_dark_gap=False keeps the culprit's slow-down but
+    skips dropping its pings, so it stays fully visible throughout. This
+    is the validation harness's "dark gap presence" axis (PLAN.md
+    section 13): with no gap to detect, F2 (dark_overlap) can't
+    contribute anything, so this checks whether the other factors alone
+    still separate the culprit from the hard negatives.
     """
     rng = np.random.default_rng(seed)
     dark_gap_min = ais_config["dark_gap_min_minutes"]
@@ -144,7 +153,11 @@ def generate_demo_scenario(field_ds: xr.Dataset, ais_config: dict, seed: int) ->
         (peak_lat, peak_lon, peak_time),
         (peak_lat + offset * 0.6, peak_lon - offset * 0.8, peak_time + leg),
     ]
-    culprit_drop = (peak_time - datetime.timedelta(minutes=25), peak_time + datetime.timedelta(minutes=25))
+    culprit_drop = (
+        (peak_time - datetime.timedelta(minutes=25), peak_time + datetime.timedelta(minutes=25))
+        if include_culprit_dark_gap
+        else None
+    )
     tracks.append(
         build_track(
             "419000001", "tanker", culprit_waypoints, ping_interval_min=8, rng=rng,
@@ -191,4 +204,48 @@ def generate_demo_scenario(field_ds: xr.Dataset, ais_config: dict, seed: int) ->
         )
     )
 
+    return tracks
+
+
+DECOY_VESSEL_TYPES = ["cargo", "tanker", "fishing"]
+
+
+def generate_decoy_vessels(field_ds: xr.Dataset, ais_config: dict, seed: int, n_vessels: int) -> list[AISTrack]:
+    """Ordinary background traffic: no relationship to the origin field,
+    normal transit speed, no dark gap. Used by the validation harness's
+    "traffic density" axis (PLAN.md section 13) to check that the
+    culprit still separates from the field once it isn't the only other
+    vessel in the scene. Waypoints are random within a box a few times
+    wider than the field itself, some passing near it and some not, the
+    way real ambient shipping traffic would."""
+    if n_vessels <= 0:
+        return []
+
+    rng = np.random.default_rng(seed)
+    dark_gap_min = ais_config["dark_gap_min_minutes"]
+    max_speed_kn = ais_config["max_plausible_speed_kn"]
+
+    t_min, t_max = field_time_bounds(field_ds)
+    lat_center = float(field_ds["lat"].values.mean())
+    lon_center = float(field_ds["lon"].values.mean())
+    lat_span = float(field_ds["lat"].values.max() - field_ds["lat"].values.min())
+    lon_span = float(field_ds["lon"].values.max() - field_ds["lon"].values.min())
+    box = max(lat_span, lon_span) * 6.0 + 0.1
+
+    tracks = []
+    for i in range(n_vessels):
+        start_lat = lat_center + rng.uniform(-box, box)
+        start_lon = lon_center + rng.uniform(-box, box)
+        end_lat = lat_center + rng.uniform(-box, box)
+        end_lon = lon_center + rng.uniform(-box, box)
+        start_time = t_min - datetime.timedelta(hours=float(rng.uniform(0, 6)))
+        end_time = t_max + datetime.timedelta(hours=float(rng.uniform(0, 6)))
+        waypoints: list[Waypoint] = [(start_lat, start_lon, start_time), (end_lat, end_lon, end_time)]
+        vessel_type = DECOY_VESSEL_TYPES[int(rng.integers(0, len(DECOY_VESSEL_TYPES)))]
+        tracks.append(
+            build_track(
+                f"419000{100 + i:03d}", vessel_type, waypoints, ping_interval_min=10, rng=rng,
+                dark_gap_min_minutes=dark_gap_min, max_speed_kn=max_speed_kn,
+            )
+        )
     return tracks

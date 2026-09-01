@@ -20,6 +20,13 @@ backend/data/precomputed/*
 !backend/data/precomputed/.gitkeep
 !backend/data/precomputed/hero_sequence.json
 
+# regeneratable fixture data (NetCDF, GeoTIFF): `make fixtures` rebuilds
+# these from backend/scripts/make_fixture_*.py, no need to commit them.
+# The real oil-texture PNGs stay committed (real_oil_texture/, not
+# scripted, see its ATTRIBUTION.md).
+backend/data/fixtures/*.nc
+backend/data/fixtures/*.tif
+
 .env
 *.log
 .DS_Store

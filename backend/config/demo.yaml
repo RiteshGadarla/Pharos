@@ -1,21 +1,33 @@
 # The hero scenario definition. See PLAN.md section 4A item 5 and section 9.
 #
-# TODO before P2: fill in the real hero incident (date, bbox, source
-# reference) once it is picked. Placeholder values below are clearly
-# marked and must not be presented as real in any demo or dossier.
+# This is a deliberately illustrative scenario, not a re-investigation of
+# any specific real, already-resolved spill (a real collision like the
+# 2010 MSC Chitra / Khalijia III incident off Mumbai has a known cause,
+# so running a synthetic attribution pipeline against it would look like
+# inventing a culprit for a solved case). Instead source_reference below
+# grounds *why this matters* in real documented Eastern Arabian Sea
+# pollution: exactly the "who did this" gap SLICKTRACE targets.
 
 incident:
   case_id: "SLICKTRACE-DEMO-0001"
-  status: "placeholder, not a real incident"
-  date: null
-  bbox: null            # [minlon, minlat, maxlon, maxlat]
-  source_reference: null
+  status: "illustrative scenario, not a real incident. See the comment above and source_reference."
+  date: "2026-01-15T02:30:00Z"   # illustrative acquisition time, matches scripts/seed_demo.py ACQUIRED_AT
+  bbox: [67.9758, 17.0267, 68.0242, 17.0733]  # illustrative, matches the fixture scene's footprint
+  source_reference: >
+    Not a specific real incident. Grounded in documented chronic
+    unattributed ("invisible source") oil pollution along India's west
+    coast / Eastern Arabian Sea: Prasad et al., "Oil pollution in the
+    Eastern Arabian Sea from invisible sources: a multi-technique
+    approach," Marine Pollution Bulletin (ScienceDirect); reporting on
+    tarballs from unreported ship discharges along India's west coast
+    (Mongabay India, 2022); and a real 2026 Indian Coast Guard mid-sea
+    interception of an oil-smuggling operation roughly 100nm off Mumbai.
 
 seed: 26143
 
 synthetic_ais:
-  region: "placeholder"
-  lane_source: "placeholder, must be real shipping lane coordinates before demo"
+  region: "Eastern Arabian Sea, open water off India's west coast, offshore of Mumbai"
+  lane_source: "placeholder, still needs real shipping lane coordinates for this region before demo, see PLAN.md section 4A"
   culprit:
     mmsi: "419000001"
     behaviour: "crosses high-probability region, slows to steady low speed, dark gap, resumes on different course"

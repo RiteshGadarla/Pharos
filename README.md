@@ -21,9 +21,22 @@ Build in progress, phase by phase, per the acceptance tests in PLAN.md section 1
 - [x] P6: backward drift ensemble (real OpenDrift/OpenOil) and origin probability field
 - [x] P7: AIS reconstruction, synthetic generator, track interpolation, dark gaps
 - [x] P8: scoring engine and elimination log
-- [ ] P9 onward: see PLAN.md section 14
+- [x] `backend/scripts/seed_demo.py`: runs the full pipeline once, offline, on the committed fixtures (detection through scoring) and writes `backend/data/precomputed/demo_bundle.json`. `services/core/app.py` serves it at `GET /api/demo`. Not the full PLAN.md section 15 precompute bundle (no real Sentinel-1 scenes, no `hero_sequence.json` for the rewind sequence), but a real end-to-end run, not fabricated data.
+- [~] P9: frontend shell, map, layers, time scrubber. Built as a functional MVP, not the full section 12/12A spec: MapLibre + deck.gl map (chart-paper style, no external tiles, works offline), a single time scrubber that drives the origin probability field and every AIS track together, detections with wind-gate verdicts, dark-gap envelopes, a suspects panel with animated factor bars and narrative, and a plain elimination log table. Suspect ranking itself is the static, already-scored result (not recomputed per scrub tick), so the P9 acceptance test ("scrubbing updates field, tracks and ranking together") is only partly met. Demo-facing additions on top of that MVP:
+  - **SAR basemap.** `backend/services/core/preview.py` warps the scene's VV band to EPSG:4326 and stretches it for display, and the map draws it under everything as a deck.gl `BitmapLayer`, so detection polygons sit on the image they came from instead of over blank water. It is a display product on a sea-anchored dB stretch, not the calibrated data the model saw; the stretch it used is on screen in the provenance chip and in `scene.preview.note`. Served at `GET /api/scene_preview.png`, with a static copy for the offline path.
+  - **Three view presets** (Scene, Origin, Traffic), named for the views in PLAN.md section 12. The case spans two orders of magnitude (a 5 km slick, a 100 km reachable envelope, an eliminated vessel 250 km out), so no single camera shows it all. Origin is the default.
+  - **Origin field as a filtered raster** rather than one polygon per grid cell, so a probability density stops reading as a mosaic of 1 km squares. The texture's texels are the field's own cells and its bounds are the field's own footprint, so the geometry is unchanged; only the display interpolation between cell centres is new.
+  - **Verdict card and scene evidence panel.** The rank-1 vessel, its dark period, its margin over rank 2, and the wind-gate verdict, age band and slick geometry, all with their stated reasoning. These answer the two questions a room asks first ("how do you know that is oil and not a look-alike", "how old is it") without having to open the dossier.
+  - **Scrubber** reads its position relative to acquisition ("6h 04m before acquisition"), not just an absolute UTC stamp, and ticks once per forcing timestep so it shows the resolution of the field it drives.
+- [x] P10: dossier PDF. `backend/services/core/dossier/render.py`, built from the same bundle the frontend reads. Cover, scene footprint, detection table (states plainly that per-class IoU is not available, P3 is deferred, rather than reporting a substitute number), slick characterisation, three origin-field time snapshots, ranked suspects with factor-contribution bar charts and narrative, the full elimination log, and a provenance page (SHA-256 of every input artifact, the git commit, `config/scoring.yaml` verbatim). Served at `GET /api/dossier`; the frontend's "Download dossier" button uses it, falling back to a static copy for the fully offline path.
+- [x] P11: validation harness. `backend/services/core/validation/harness.py` and `backend/scripts/run_validation.py`. Runs 50 synthetic incidents stratified across a few independently-run backward ensembles, traffic density and dark-gap presence, and reports rank-1/rank-3 accuracy, mean rank, and a breakdown by traffic density, plus the two ablations (F2 zeroed, F1 replaced by distance to the field's centroid) to `backend/data/processed/validation.md`. Reported honestly, including a case where the aggregate ablation numbers moved the opposite of the expected direction on this run, with the underlying mechanism isolated separately (a purpose-built right-place-wrong-time decoy vessel) rather than smoothed over. States plainly that this measures internal consistency, not real-world accuracy.
+- [ ] P9a (GPU ambient flow shader), P9b (choreographed rewind sequence), P12 (3D space-time prism): not started, see PLAN.md section 14.
 
-P2 was validated against a synthetic fixture scene (`backend/scripts/make_fixture_scene.py`, `backend/data/fixtures/synthetic_scene.tif`), not a real Sentinel-1 product, since Sentinel-1 access is blocked on the Earthdata account (PLAN.md section 4A). Swap in a real scene once that account exists; the pipeline itself does not change.
+P2 was validated against a fixture scene (`backend/scripts/make_fixture_scene.py`, `backend/data/fixtures/synthetic_scene.tif`), not a real Sentinel-1 product, since Sentinel-1 access is blocked on the Earthdata account (PLAN.md section 4A). Swap in a real scene once that account exists; the pipeline itself does not change. The fixture's own slick is no longer hand-drawn: it composites real Sentinel-1A oil-spill backscatter and speckle texture from a CC BY 4.0 dataset (Persian Gulf, not the Arabian Sea) into the synthetic background, with the oil/sea contrast scaled up from the source patch's own value to clear the detector's confidence threshold. See `backend/data/fixtures/real_oil_texture/ATTRIBUTION.md` for the source, license and exactly what was changed.
+
+The demo's own incident (`backend/config/demo.yaml`) is a deliberately illustrative scenario, not a re-investigation of a specific real, already-resolved spill: its `source_reference` grounds *why this matters* in real, documented, unattributed Eastern Arabian Sea pollution (peer-reviewed literature, journalism on tarballs from unreported discharges, and a real Indian Coast Guard smuggling interception off Mumbai), while the date, bounding box and outcome stay clearly synthetic.
+
+`backend/data/fixtures/*.nc` and `*.tif` are not committed (regeneratable, deterministic, no reason to carry binary diffs in git history): run `make fixtures` to build them from `backend/scripts/make_fixture_*.py`, or just `make test` / `make setup`, which both build whatever's missing first. The real oil-texture PNGs under `backend/data/fixtures/real_oil_texture/` stay committed, since those aren't scripted, they're pulled from a real dataset.
 
 ## Repository layout
 
@@ -41,8 +54,27 @@ make run-detection    # run services/detection locally, http://localhost:8001
 make test             # run the test suite locally
 ```
 
-These root-level targets delegate into `backend/Makefile`. Run them directly from `backend/` if you prefer. Copy `backend/.env.example` to `backend/.env` first; `POSTGRES_HOST` points at `localhost` since the database is the only thing in Docker.
+These root-level targets delegate into `backend/Makefile`. Run them directly from `backend/` if you prefer. Copy `backend/.env.example` to `backend/.env` first; `POSTGRES_HOST` points at `localhost` since the database is the only thing in Docker. `KAGGLE_API_TOKEN` there is only needed to re-pull the real oil-slick texture patch (`.venv/bin/kaggle datasets download bitsandlayers/sar-oil-spill-segmentation-dataset-sos`); the chosen patch is already committed under `backend/data/fixtures/real_oil_texture/`, so this isn't needed for normal development.
 
 Absolute slick age in hours cannot be estimated reliably from a single SAR acquisition. This system reports a relative age band and states its reasoning, never a number in hours.
 
 Every eliminated vessel carries a non-empty reason. Vessel type and class never eliminate a vessel, they only downweight its score.
+
+### Frontend (demo UI)
+
+From the repo root:
+
+```
+make setup   # backend venv, model download, demo bundle, frontend node_modules -- skips whatever is already there
+make dev     # runs the core service (:8000) and the frontend dev server (:5173) together, Ctrl+C stops both
+```
+
+`make setup` is idempotent: safe to re-run, only does the parts that are missing. Run `make seed-demo` directly (not `setup`) to force a fresh regenerate of the demo bundle, the SAR basemap PNG and the dossier PDF after changing a fixture or `config/scoring.yaml`; it also copies all three into `frontend/public/data/`, the static fallback the frontend uses when the core service isn't running, so the demo also works with the network cable unplugged and no backend process at all.
+
+### Running it on demo day
+
+`make dev` is the normal path. For the case where the laptop cannot be trusted to keep two dev servers alive, `cd frontend && npm run build && npx vite preview` serves the production build with no backend at all: the bundle, the basemap and the dossier all load from `frontend/public/data/`, which is what the "DEMO MODE: OFFLINE" badge in the header refers to. This path is worth exercising once before the day, since it is the one that has no moving parts.
+
+Presenting order that matches how the pipeline actually runs: **Scene** (the SAR image, the detected slick on it, and the wind gate that accepted it), **Origin** (the backward drift's probability field, scrubbing back from acquisition), then **Traffic** (every vessel, the dark period envelopes, and the vessels eliminated far off scene). The elimination log tab is the tab to open when asked how a vessel was ruled out.
+
+Run `make validate` to run the 50-incident validation harness and write `backend/data/processed/validation.md` (takes under a minute; it runs a handful of real backward ensembles).
