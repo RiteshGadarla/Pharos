@@ -15,6 +15,19 @@
   --oil: #f2a03d;
   --suspect: #d6455e;
   --cleared: #4e7c6b;
+  /* Unmatched radar targets, and only those. Its own colour because it
+     is the only thing on the map from a second, independent sensor. */
+  --radar: #7fb2c4;
+  /* The forward forecast field, and only that. Off the chart palette
+     deliberately: the backward origin field is drawn in --oil because it
+     is a claim about observed oil, and a prediction must not be able to
+     borrow the authority of that colour. */
+  --forecast: #b08cc7;
+  /* Surface current and 10 m wind arrows. Forcing is context the case is
+     drawn on, never a finding, so both sit in the chart's own register
+     rather than borrowing an evidence colour. */
+  --current: #3e7a93;
+  --wind: #8fa98c;
 
   --font-heading: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
   --font-body: "Inter", system-ui, sans-serif;

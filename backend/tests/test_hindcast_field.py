@@ -1,5 +1,5 @@
-"""Tests for the origin probability field. See PLAN.md section 8 and
-section 16: "a test that the origin field normalises to 1 and retains
+"""Tests for the origin probability field. See PLAN.md section 9.3 and
+section 21: "a test that the origin field normalises to 1 and retains
 its time dimension."
 """
 

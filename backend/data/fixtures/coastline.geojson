@@ -1,0 +1,65 @@
+{
+  "type": "FeatureCollection",
+  "note": "Heavily generalised west coast of India, for distance-to-nearest-land only. NOT a survey-grade baseline and NOT a territorial sea baseline. Replace with Natural Earth or GSHHG for any real use. See PLAN.md sections 4A and 13.",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            72.6,
+            21.6
+          ],
+          [
+            72.8,
+            20.7
+          ],
+          [
+            72.85,
+            19.9
+          ],
+          [
+            72.82,
+            19.08
+          ],
+          [
+            73.1,
+            18.3
+          ],
+          [
+            73.3,
+            17.5
+          ],
+          [
+            73.45,
+            16.6
+          ],
+          [
+            74.1,
+            15.6
+          ],
+          [
+            74.3,
+            14.8
+          ],
+          [
+            74.65,
+            13.9
+          ],
+          [
+            75.2,
+            12.9
+          ],
+          [
+            75.75,
+            11.8
+          ]
+        ]
+      },
+      "properties": {
+        "name": "West coast of India (generalised)"
+      }
+    }
+  ]
+}

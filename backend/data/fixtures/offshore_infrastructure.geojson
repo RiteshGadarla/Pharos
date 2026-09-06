@@ -1,0 +1,34 @@
+{
+  "type": "FeatureCollection",
+  "note": "Illustrative offshore installation points for the demo footprint, NOT a real platform register. Replace with a public offshore platform point layer for the operating region before any real use. See PLAN.md section 14.",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          68.35,
+          17.4
+        ]
+      },
+      "properties": {
+        "name": "Illustrative platform A",
+        "type": "fixed production platform"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          67.55,
+          16.7
+        ]
+      },
+      "properties": {
+        "name": "Illustrative platform B",
+        "type": "fixed wellhead platform"
+      }
+    }
+  ]
+}

@@ -13,7 +13,7 @@ from services.detection.infer import load_model, run_inference
 from services.detection.polygonize import detect_oil
 from services.detection.render import render_geotiff
 
-app = FastAPI(title="slicktrace-detection")
+app = FastAPI(title="drishta-detection")
 
 CONFIG_PATH = "config/pipeline.yaml"
 

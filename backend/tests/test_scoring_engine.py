@@ -28,12 +28,47 @@ def _scoring_config():
 
 
 def test_culprit_ranks_first_and_every_hard_negative_is_below_it():
+    """PLAN.md section 19, the P8 acceptance test.
+
+    Run with the radar cross check in place, because that is how the
+    pipeline runs and because the fourth hard negative (419000005)
+    exists specifically to be separated by F8: it goes dark over the
+    field like the culprit, and the only thing distinguishing them is
+    whether radar saw a hull inside the envelope at the acquisition
+    instant.
+    """
+    import pandas as pd
+
+    from services.core.ais.integrity import annotate_integrity
+    from services.core.ais.synthetic import inject_ship_targets
+    from services.core.crosscheck.radar import run_cross_check
+
     field_ds = xr.open_dataset(FIELD_FIXTURE)
     scoring_config = _scoring_config()
     tracks = generate_demo_scenario(field_ds, AIS_CONFIG, seed=scoring_config["seed"])
+    tracks = annotate_integrity(tracks, scoring_config.get("integrity", {}))
+
+    acquired_at = pd.Timestamp(field_ds["time"].values.max()).to_pydatetime()
+    cross_check = run_cross_check(
+        inject_ship_targets(tracks, field_ds, acquired_at),
+        tracks, field_ds, acquired_at, {"match_radius_m": 1500.0},
+    )
 
     survivors, eliminations = eliminate_and_survive(tracks, field_ds, scoring_config)
-    scores = score_vessels(survivors, field_ds, SLICK_FEATURES, scoring_config)
+    scores = score_vessels(survivors, field_ds, SLICK_FEATURES, scoring_config, cross_check=cross_check)
+
+    # F8 fires for the culprit and for nobody else. Without this the
+    # test above would still pass on a scoring engine that simply
+    # rewarded darkness, which is the thing F8 is supposed to improve on.
+    culprit = next(s for s in scores if s.mmsi == CULPRIT_MMSI)
+    assert culprit.factors["radar_confirmed_dark"] > 0
+    assert culprit.radar_support is not None
+    for s in scores:
+        if s.mmsi != CULPRIT_MMSI:
+            assert s.factors["radar_confirmed_dark"] == 0, (
+                f"F8 fired for {s.mmsi}, which should have no unmatched radar target "
+                "in its dark envelope at the acquisition instant"
+            )
 
     eliminated_mmsis = {e.mmsi for e in eliminations}
     assert CULPRIT_MMSI not in eliminated_mmsis, "the culprit itself must never be eliminated"
@@ -60,7 +95,7 @@ def test_every_eliminated_vessel_has_a_non_empty_reason():
         assert e.rule
 
 
-def test_all_four_demo_vessels_are_accounted_for():
+def test_every_demo_vessel_is_accounted_for():
     field_ds = xr.open_dataset(FIELD_FIXTURE)
     scoring_config = _scoring_config()
     tracks = generate_demo_scenario(field_ds, AIS_CONFIG, seed=scoring_config["seed"])
@@ -68,6 +103,10 @@ def test_all_four_demo_vessels_are_accounted_for():
 
     accounted_for = {t.mmsi for t in survivors} | {e.mmsi for e in eliminations}
     assert accounted_for == {t.mmsi for t in tracks}
+    # The culprit plus four hard negatives (PLAN.md section 10). A vessel
+    # that is neither scored nor eliminated has vanished without a
+    # record, which is the one outcome non-negotiable 2 forbids.
+    assert len(accounted_for) == 5
 
 
 def test_score_vessels_factors_sum_to_total_for_every_survivor():

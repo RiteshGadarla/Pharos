@@ -4,7 +4,7 @@ interface Props {
   bundle: DemoBundle;
 }
 
-// Deliberately unglamorous, PLAN.md section 12: "Its job is to look
+// Deliberately unglamorous, PLAN.md section 16: "Its job is to look
 // like a record, not a visualisation."
 export default function EliminationLog({ bundle }: Props) {
   const vesselByMmsi = new Map(bundle.vessels.map((v) => [v.mmsi, v]));

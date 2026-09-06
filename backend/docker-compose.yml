@@ -3,15 +3,15 @@ services:
     image: timescale/timescaledb-ha:pg16-all
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-slicktrace}
-      POSTGRES_USER: ${POSTGRES_USER:-slicktrace}
+      POSTGRES_DB: ${POSTGRES_DB:-drishta}
+      POSTGRES_USER: ${POSTGRES_USER:-drishta}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     ports:
       - "5432:5432"
     volumes:
       - db_data:/home/postgres/pgdata/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-slicktrace}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-drishta}"]
       interval: 5s
       timeout: 5s
       retries: 10

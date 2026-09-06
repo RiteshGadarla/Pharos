@@ -1,4 +1,10 @@
-"""Validation harness for the scoring engine. See PLAN.md section 13.
+"""Validation harness for the scoring engine. See PLAN.md section 17.1.
+
+This module lives under backend/validation/, a sibling of
+backend/services/, and nothing under services/ may import it. That
+placement is not tidiness: PLAN.md non-negotiable 5 keeps the Cerulean
+client (validation/cerulean_client.py) out of the runtime path, and a
+test enforces it by scanning the source tree.
 
 There is no ground truth for real-world spill attribution, so this
 harness builds its own: generate synthetic incidents with a *known*
@@ -8,7 +14,7 @@ measures internal consistency of the scoring model, not real-world
 accuracy, and the report says so explicitly. Validation against a
 documented, prosecuted incident is the next step, not this.
 
-Each incident varies three axes PLAN.md section 13 asks for directly:
+Each incident varies three axes PLAN.md section 17.1 asks for directly:
 traffic density (how many ordinary decoy vessels share the scene),
 dark gap presence (whether the culprit ever goes dark at all), and
 backward horizon / wind conditions (which of a handful of real,
@@ -19,13 +25,20 @@ before a demo, so a small number of real ensembles are run once
 top of them, the same way scripts/make_fixture_origin_field.py caches
 one for the test suite.
 
-Two ablations, run on every incident for a direct comparison:
-  - F2 (dark_overlap) zeroed out, via a scoring_config with that
+Three ablations, run on every incident for a direct comparison
+(PLAN.md section 17.1):
+  - A: F2 (dark_overlap) zeroed out, via a scoring_config with that
     factor's weight set to 0. Uses the real scoring engine unmodified.
-  - F1 (field_integral) replaced with closeness to the field's
+  - B: F1 (field_integral) replaced with closeness to the field's
     time-collapsed centroid: the exact "distance to a single point"
     baseline PLAN.md non-negotiable 1 says a real system must never
     use, kept here only to measure how much worse it does.
+  - C: F8 (radar_confirmed_dark) zeroed out, which measures how much
+    the independent radar observation contributes on top of the AIS
+    evidence alone.
+
+A and B prove the two headline USP claims quantitatively rather than
+asserting them. C proves the third.
 """
 
 from __future__ import annotations
@@ -38,7 +51,16 @@ from dataclasses import dataclass, field
 import numpy as np
 import xarray as xr
 
-from services.core.ais.synthetic import build_track, field_peak, field_time_bounds, generate_decoy_vessels, generate_demo_scenario
+from services.core.ais.integrity import annotate_integrity
+from services.core.ais.synthetic import (
+    build_track,
+    field_peak,
+    field_time_bounds,
+    generate_decoy_vessels,
+    generate_demo_scenario,
+    inject_ship_targets,
+)
+from services.core.crosscheck.radar import run_cross_check
 from services.core.hindcast.ensemble import run_ensemble
 from services.core.hindcast.field import build_origin_field
 from services.core.schemas import AISTrack, Detection, SlickFeatures, SuspectScore
@@ -100,7 +122,10 @@ FIELD_VARIANTS = {
 
 TRAFFIC_DENSITY_LEVELS = {"low": 0, "medium": 4, "high": 10}
 
-NEAR_MISS_MMSI = "419000005"
+# Deliberately outside the demo scenario's own MMSI block (419000001
+# to 419000005), so the harness's decoy cannot collide with a hard
+# negative the generator injects.
+NEAR_MISS_MMSI = "419000009"
 
 
 def build_near_miss_vessel(field_ds: xr.Dataset, ais_config: dict, seed: int) -> AISTrack:
@@ -180,6 +205,7 @@ class IncidentResult:
     baseline_rank: int | None
     no_dark_overlap_rank: int | None
     centroid_baseline_rank: int | None
+    no_radar_rank: int | None = None
     # culprit's total score minus the best surviving competitor's, per
     # scoring variant. Rank alone only moves when a competitor's score
     # actually crosses the culprit's, which a strong culprit signal can
@@ -188,6 +214,7 @@ class IncidentResult:
     baseline_margin: float | None = None
     no_dark_overlap_margin: float | None = None
     centroid_baseline_margin: float | None = None
+    no_radar_margin: float | None = None
     # the deliberately deceptive near-miss vessel's own total score,
     # baseline vs centroid ablation: the most direct read on whether the
     # centroid baseline actually falls for a right-place-wrong-time
@@ -268,7 +295,7 @@ def score_with_centroid_baseline(
     a variant of the production one."""
     factor_weights = {key: cfg["weight"] for key, cfg in scoring_config["factors"].items()}
     plausibility_table = scoring_config.get("vessel_plausibility_table")
-    linear_factors = {"field_integral", "dark_overlap"}
+    linear_factors = {"field_integral", "dark_overlap", "radar_confirmed_dark"}
 
     centroid = _field_centroid(field_ds)
     raw_distance = {t.mmsi: _min_distance_to_point_km(t, centroid) for t in tracks}
@@ -277,12 +304,14 @@ def score_with_centroid_baseline(
 
     scores = []
     for track in tracks:
-        raw = compute_all_factors(track, field_ds, slick_features, plausibility_table)
+        raw, _radar_target_id = compute_all_factors(track, field_ds, slick_features, plausibility_table)
         dist = raw_distance[track.mmsi]
         raw["field_integral"] = 0.0 if not math.isfinite(dist) or max_d <= 0 else max(0.0, 1.0 - dist / max_d)
 
         contributions = {}
         for name, value in raw.items():
+            if name not in factor_weights:
+                continue
             weight = factor_weights[name]
             if name in linear_factors:
                 contributions[name] = weight * min(max(value, 0.0), 1.0)
@@ -315,31 +344,67 @@ def _culprit_margin(scores: list[SuspectScore], culprit_mmsi: str) -> float | No
     return culprit_total - max(others)
 
 
-def run_incident(spec: IncidentSpec, field_ds: xr.Dataset, ais_config: dict, scoring_config: dict) -> IncidentResult:
+def run_incident(
+    spec: IncidentSpec,
+    field_ds: xr.Dataset,
+    ais_config: dict,
+    scoring_config: dict,
+    radar_config: dict | None = None,
+) -> IncidentResult:
     n_decoys = TRAFFIC_DENSITY_LEVELS[spec.traffic_density]
     core_tracks = generate_demo_scenario(field_ds, ais_config, spec.seed, include_culprit_dark_gap=spec.include_dark_gap)
     near_miss = build_near_miss_vessel(field_ds, ais_config, spec.seed + 200000)
     decoys = generate_decoy_vessels(field_ds, ais_config, spec.seed + 100000, n_decoys)
     tracks = core_tracks + [near_miss] + decoys
+    tracks = annotate_integrity(tracks, scoring_config.get("integrity", {}))
+
+    # Each incident gets its own radar cross check, built from the same
+    # synthetic ship targets the demo scenario uses. Without one,
+    # ablation C would compare the model against itself and report a
+    # zero difference as though that were a result.
+    _, acquisition = field_time_bounds(field_ds)
+    cross_check = run_cross_check(
+        inject_ship_targets(tracks, field_ds, acquisition),
+        tracks,
+        field_ds,
+        acquisition,
+        radar_config or {"match_radius_m": 1500.0},
+    )
 
     survivors, eliminations = eliminate_and_survive(tracks, field_ds, scoring_config)
     culprit_eliminated = any(e.mmsi == CULPRIT_MMSI for e in eliminations)
 
-    baseline_rank = no_dark_overlap_rank = centroid_rank = None
-    baseline_margin = no_dark_overlap_margin = centroid_margin = None
+    baseline_rank = no_dark_overlap_rank = centroid_rank = no_radar_rank = None
+    baseline_margin = no_dark_overlap_margin = centroid_margin = no_radar_margin = None
     near_miss_survived = any(t.mmsi == NEAR_MISS_MMSI for t in survivors)
     near_miss_baseline_total = near_miss_centroid_total = None
     if not culprit_eliminated:
-        baseline_scores = score_vessels(survivors, field_ds, SLICK_FEATURES, scoring_config)
+        baseline_scores = score_vessels(survivors, field_ds, SLICK_FEATURES, scoring_config, cross_check=cross_check)
         baseline_rank = _culprit_rank(baseline_scores, CULPRIT_MMSI)
         baseline_margin = _culprit_margin(baseline_scores, CULPRIT_MMSI)
 
+        # Ablation A: F2 (dark overlap) zeroed.
         no_dark_overlap_config = copy.deepcopy(scoring_config)
         no_dark_overlap_config["factors"]["dark_overlap"]["weight"] = 0.0
-        no_dark_overlap_scores = score_vessels(survivors, field_ds, SLICK_FEATURES, no_dark_overlap_config)
+        no_dark_overlap_scores = score_vessels(
+            survivors, field_ds, SLICK_FEATURES, no_dark_overlap_config, cross_check=cross_check
+        )
         no_dark_overlap_rank = _culprit_rank(no_dark_overlap_scores, CULPRIT_MMSI)
         no_dark_overlap_margin = _culprit_margin(no_dark_overlap_scores, CULPRIT_MMSI)
 
+        # Ablation C: F8 (radar confirmed dark) zeroed. Measures what
+        # the independent radar observation adds on top of the AIS
+        # evidence alone.
+        if "radar_confirmed_dark" in scoring_config.get("factors", {}):
+            no_radar_config = copy.deepcopy(scoring_config)
+            no_radar_config["factors"]["radar_confirmed_dark"]["weight"] = 0.0
+            no_radar_scores = score_vessels(
+                survivors, field_ds, SLICK_FEATURES, no_radar_config, cross_check=cross_check
+            )
+            no_radar_rank = _culprit_rank(no_radar_scores, CULPRIT_MMSI)
+            no_radar_margin = _culprit_margin(no_radar_scores, CULPRIT_MMSI)
+
+        # Ablation B: F1 replaced by distance to the field's centroid.
         centroid_scores = score_with_centroid_baseline(survivors, field_ds, SLICK_FEATURES, scoring_config)
         centroid_rank = _culprit_rank(centroid_scores, CULPRIT_MMSI)
         centroid_margin = _culprit_margin(centroid_scores, CULPRIT_MMSI)
@@ -355,9 +420,11 @@ def run_incident(spec: IncidentSpec, field_ds: xr.Dataset, ais_config: dict, sco
         baseline_rank=baseline_rank,
         no_dark_overlap_rank=no_dark_overlap_rank,
         centroid_baseline_rank=centroid_rank,
+        no_radar_rank=no_radar_rank,
         baseline_margin=baseline_margin,
         no_dark_overlap_margin=no_dark_overlap_margin,
         centroid_baseline_margin=centroid_margin,
+        no_radar_margin=no_radar_margin,
         near_miss_survived=near_miss_survived,
         near_miss_baseline_total=near_miss_baseline_total,
         near_miss_centroid_total=near_miss_centroid_total,
@@ -408,20 +475,30 @@ class Accuracy:
         return self.eliminated / self.n if self.n else 0.0
 
 
-def run_validation(n_incidents: int, base_seed: int, ais_config: dict, scoring_config: dict) -> dict:
+def run_validation(
+    n_incidents: int,
+    base_seed: int,
+    ais_config: dict,
+    scoring_config: dict,
+    radar_config: dict | None = None,
+) -> dict:
     """Runs the full harness: builds the field variants once, generates
     n_incidents synthetic scenarios stratified across field variant,
     traffic density and dark-gap presence, runs elimination and all
-    three scorings (baseline, F2-zeroed, F1-as-centroid-distance) on
-    each, and returns the aggregated accuracy breakdown."""
+    four scorings (baseline, F2-zeroed, F1-as-centroid-distance,
+    F8-zeroed) on each, and returns the aggregated accuracy breakdown."""
     fields = build_field_variants(base_seed)
     specs = build_incident_specs(n_incidents, base_seed)
 
-    results = [run_incident(spec, fields[spec.field_variant], ais_config, scoring_config) for spec in specs]
+    results = [
+        run_incident(spec, fields[spec.field_variant], ais_config, scoring_config, radar_config)
+        for spec in specs
+    ]
 
     overall = Accuracy()
     no_dark_overlap = Accuracy()
     centroid_baseline = Accuracy()
+    no_radar = Accuracy()
     by_density: dict[str, Accuracy] = {d: Accuracy() for d in TRAFFIC_DENSITY_LEVELS}
 
     near_miss_baseline_totals = []
@@ -430,6 +507,7 @@ def run_validation(n_incidents: int, base_seed: int, ais_config: dict, scoring_c
         overall.add(r.baseline_rank, r.culprit_eliminated, r.baseline_margin)
         no_dark_overlap.add(r.no_dark_overlap_rank, r.culprit_eliminated, r.no_dark_overlap_margin)
         centroid_baseline.add(r.centroid_baseline_rank, r.culprit_eliminated, r.centroid_baseline_margin)
+        no_radar.add(r.no_radar_rank, r.culprit_eliminated, r.no_radar_margin)
         by_density[r.spec.traffic_density].add(r.baseline_rank, r.culprit_eliminated, r.baseline_margin)
         if r.near_miss_baseline_total is not None and r.near_miss_centroid_total is not None:
             near_miss_baseline_totals.append(r.near_miss_baseline_total)
@@ -449,4 +527,6 @@ def run_validation(n_incidents: int, base_seed: int, ais_config: dict, scoring_c
         "near_miss": near_miss_summary,
         "ablation_no_dark_overlap": no_dark_overlap,
         "ablation_centroid_baseline": centroid_baseline,
+        "ablation_no_radar": no_radar,
+        "radar_available": True,
     }

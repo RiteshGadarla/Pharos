@@ -20,12 +20,25 @@ def test_field_peak_is_inside_the_grid_bounds():
     assert t_min <= time <= t_max
 
 
-def test_generate_demo_scenario_returns_four_tracks_with_expected_ids():
+def test_generate_demo_scenario_returns_the_culprit_and_four_hard_negatives():
+    """PLAN.md section 10 requires four hard negatives, not three. The
+    fourth (419000005) goes dark over the field like the culprit but has
+    no unmatched radar target in its envelope, which is what separates
+    F8 from a factor that merely rewards darkness."""
     field_ds = _field()
     tracks = generate_demo_scenario(field_ds, AIS_CONFIG, seed=26143)
-    assert len(tracks) == 4
+    assert len(tracks) == 5
     mmsis = {t.mmsi for t in tracks}
-    assert mmsis == {"419000001", "419000002", "419000003", "419000004"}
+    assert mmsis == {"419000001", "419000002", "419000003", "419000004", "419000005"}
+
+
+def test_the_fourth_hard_negative_goes_dark_just_like_the_culprit():
+    """If it did not, it would not be a hard negative for F8: the
+    comparison only means something when the only difference between
+    this vessel and the culprit is whether radar saw a hull."""
+    field_ds = _field()
+    tracks = {t.mmsi: t for t in generate_demo_scenario(field_ds, AIS_CONFIG, seed=26143)}
+    assert tracks["419000005"].dark_gaps, "the no-radar negative must have a dark gap"
 
 
 def test_generate_demo_scenario_is_deterministic():

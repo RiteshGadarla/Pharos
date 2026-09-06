@@ -25,28 +25,33 @@ export default function LayerToggles({ toggles, onChange, bundle }: Props) {
         <input type="checkbox" checked={toggles.field} onChange={() => toggle("field")} />
         Origin field
       </label>
+      {bundle.forecast_field && (
+        <label
+          title={`Forward forecast, n=${bundle.forecast_field.n_members}. Response planning only, never an input to the ranking.`}
+        >
+          <input type="checkbox" checked={toggles.forecast} onChange={() => toggle("forecast")} />
+          Forecast field
+        </label>
+      )}
       <label>
         <input type="checkbox" checked={toggles.traffic} onChange={() => toggle("traffic")} />
         AIS traffic
       </label>
-      <div className="legend">
-        <div className="legend-row">
-          <span className="swatch swatch-oil" /> oil / origin field
-        </div>
-        <div className="legend-row">
-          <span className="swatch swatch-suspect" /> rank 1 suspect
-        </div>
-        <div className="legend-row">
-          <span className="swatch swatch-muted" /> other survivor
-        </div>
-        <div className="legend-row">
-          <span className="swatch swatch-cleared" /> eliminated
-        </div>
-        <div className="legend-row">
-          <span className="swatch swatch-dashed" /> dark period + reachable envelope
-        </div>
-      </div>
-      {/* PLAN.md section 12A: a provenance chip next to the animated
+      <label
+        title={
+          bundle.radar_crosscheck
+            ? `${bundle.radar_crosscheck.n_targets} ship target(s) in the SAR scene, ${bundle.radar_crosscheck.n_unmatched} with no AIS association at the acquisition instant.`
+            : "No radar cross check was run for this case."
+        }
+      >
+        <input type="checkbox" checked={toggles.radar} onChange={() => toggle("radar")} />
+        Radar ship targets
+      </label>
+      {/* The swatch list that used to sit here named each mark without
+          explaining it, which is fine for someone who built the pipeline
+          and useless for a room seeing it once. MapLegend replaced it
+          with a sentence per mark, keyed to the layers actually on. */}
+      {/* PLAN.md section 16A: a provenance chip next to the animated
           layers, so what moves on screen is traceable to its source. */}
       {preview && (
         <div className="legend provenance">
@@ -56,6 +61,7 @@ export default function LayerToggles({ toggles, onChange, bundle }: Props) {
           <div>
             field n={bundle.origin_field.n_members}, seed={bundle.origin_field.seed}
           </div>
+          {bundle.origin_field.kernel && <div>kernel {bundle.origin_field.kernel}</div>}
         </div>
       )}
     </div>

@@ -9,12 +9,24 @@ import {
   overallBounds,
   padBounds,
   positionAt,
-  trackSegments,
 } from "../lib/geo";
+import { arrowPath, arrowsAt, gridSpacingDeg, peakSpeed } from "../lib/forcing";
+import {
+  darkMidpoint,
+  darkReachKm,
+  deadReckonedPath,
+  headingAt,
+  isDarkGapActive,
+  rankOf,
+  reportedSegments,
+  vesselRole,
+  vesselSummary,
+} from "../lib/vessel";
 import { fieldRasterBounds, fieldSliceMax, fieldSliceToCanvas } from "../lib/fieldRaster";
 import { buildGraticule } from "../lib/graticule";
+import { frameField, type TimelineFrame } from "../lib/timeline";
 import { COLORS, hexToRgb } from "../lib/tokens";
-import type { DemoBundle, VesselJSON } from "../types";
+import type { DemoBundle, ShipTargetJSON, VesselJSON } from "../types";
 
 const BLANK_STYLE: maplibregl.StyleSpecification = {
   version: 8,
@@ -28,12 +40,26 @@ const CLEARED_RGB = hexToRgb(COLORS.cleared);
 const MUTED_RGB = hexToRgb(COLORS.muted);
 const PAPER_RGB = hexToRgb(COLORS.paper);
 const GRATICULE_RGB = hexToRgb(COLORS.graticule);
+const RADAR_RGB = hexToRgb(COLORS.radar);
+const CURRENT_RGB = hexToRgb(COLORS.current);
+const WIND_RGB = hexToRgb(COLORS.wind);
 
 export interface LayerToggles {
   scene: boolean;
   detections: boolean;
+  // The backward origin field: where the slick came from.
   field: boolean;
+  // The forward forecast field: where it goes next. A separate toggle
+  // from `field` and not a mode of it, because the two answer different
+  // questions and only one of them is evidence.
+  forecast: boolean;
   traffic: boolean;
+  radar: boolean;
+  // Surface current and 10 m wind, subsampled from the same NetCDF the
+  // drift ensemble integrated. Context for why the origin field leans
+  // the way it does, never an input to the ranking.
+  current: boolean;
+  wind: boolean;
 }
 
 // The scene PNG comes from the core service when it is up and from the
@@ -43,9 +69,23 @@ const SCENE_PREVIEW_SRC = "/api/scene_preview.png";
 const SCENE_PREVIEW_FALLBACK_SRC = "/data/scene_preview.png";
 
 function vesselColor(vessel: VesselJSON, culpritMmsi: string): [number, number, number] {
-  if (vessel.status === "eliminated") return CLEARED_RGB;
-  if (vessel.mmsi === culpritMmsi) return SUSPECT_RGB;
+  const role = vesselRole(vessel, culpritMmsi);
+  if (role === "eliminated") return CLEARED_RGB;
+  if (role === "culprit") return SUSPECT_RGB;
   return MUTED_RGB;
+}
+
+// How strongly to draw a vessel given what is selected.
+//
+// Selecting one vessel dims the rest hard rather than merely
+// highlighting the chosen one. With five tracks, two envelopes and a
+// probability field on screen at once, a highlight is lost; taking the
+// others down to a fifth is what actually isolates the one being
+// discussed, and every one of them is a click away from coming back.
+function vesselAlpha(mmsi: string, selected: string | null, hovered: string | null): number {
+  if (!selected) return mmsi === hovered ? 255 : 215;
+  if (mmsi === selected) return 255;
+  return 55;
 }
 
 function gateFillColor(verdict: string): [number, number, number, number] {
@@ -57,7 +97,11 @@ function gateFillColor(verdict: string): [number, number, number, number] {
 interface Props {
   bundle: DemoBundle;
   timeMs: number;
-  timeIndex: number;
+  // Which drift field owns the current instant, and where in it. The
+  // map draws exactly one field: the backward origin field up to the
+  // acquisition instant, the forward forecast after it. See
+  // lib/timeline.ts for why the two are never blended.
+  frame: TimelineFrame;
   toggles: LayerToggles;
   viewBounds: Bounds;
   hoveredMmsi: string | null;
@@ -69,7 +113,7 @@ interface Props {
 export default function MapView({
   bundle,
   timeMs,
-  timeIndex,
+  frame,
   toggles,
   viewBounds,
   hoveredMmsi,
@@ -92,15 +136,23 @@ export default function MapView({
   // a square root, which lifts the tail enough to wash the SAR scene
   // orange from edge to edge. Capped well below opaque for the same
   // reason: the field sits over the scene and has to let it through.
-  const sliceMax = useMemo(() => fieldSliceMax(bundle.origin_field, timeIndex), [bundle.origin_field, timeIndex]);
+  // The field this instant belongs to, and whether it is the evidence
+  // or the forecast. Exactly one of them is live at any frame.
+  const activeField = useMemo(() => frameField(bundle, frame), [bundle, frame]);
+  const fieldVisible = frame.direction === "backward" ? toggles.field : toggles.forecast;
+
+  const sliceMax = useMemo(
+    () => (activeField ? fieldSliceMax(activeField, frame.index) : 0),
+    [activeField, frame.index],
+  );
   const alphaScale = useMemo(
     () => scalePow().exponent(0.7).domain([0, sliceMax || 1]).range([0, 165]).clamp(true),
     [sliceMax],
   );
   const graticule = useMemo(() => buildGraticule(extent, viewBounds), [extent, viewBounds]);
   const fieldCanvas = useMemo(
-    () => fieldSliceToCanvas(bundle.origin_field, timeIndex, alphaScale),
-    [bundle.origin_field, timeIndex, alphaScale],
+    () => (activeField ? fieldSliceToCanvas(activeField, frame.index, alphaScale) : null),
+    [activeField, frame.index, alphaScale],
   );
 
   // Same live-then-static fallback as api.ts: the scene PNG is served by
@@ -229,12 +281,69 @@ export default function MapView({
       }),
     );
 
-    if (toggles.field && fieldCanvas) {
+    // Forcing arrows sit under every finding, above only the scene and
+    // the graticule. They are the chart the case is drawn on: the water
+    // and air that moved the oil. Drawing them over the tracks would
+    // make context compete with evidence.
+    const forcing = bundle.forcing;
+    if (forcing && (toggles.current || toggles.wind)) {
+      // Arrow length is scaled against the run's own peak, not against
+      // whatever is on screen this frame. Per-frame scaling would make a
+      // calm hour look identical to a gale, which is the one thing an
+      // arrow layer exists to distinguish.
+      //
+      // The cap is the grid spacing, not the viewport: an arrow longer
+      // than the distance to its neighbour overlaps it, and a field of
+      // overlapping arrows is a texture rather than a reading.
+      const arrowSpanDeg = gridSpacingDeg(forcing) * 0.72;
+      if (toggles.current) {
+        const arrows = arrowsAt(forcing, timeMs, "current");
+        const peak = peakSpeed(forcing, "current");
+        layers.push(
+          new PathLayer({
+            id: "current-arrows",
+            data: arrows,
+            getPath: (d) => arrowPath(d, peak, arrowSpanDeg),
+            getColor: [...CURRENT_RGB, 170],
+            getWidth: 1.4,
+            widthMinPixels: 1.4,
+            widthMaxPixels: 3,
+            pickable: true,
+            updateTriggers: { getPath: [timeMs, arrowSpanDeg] },
+          }),
+        );
+      }
+      if (toggles.wind) {
+        const arrows = arrowsAt(forcing, timeMs, "wind");
+        const peak = peakSpeed(forcing, "wind");
+        layers.push(
+          new PathLayer({
+            id: "wind-arrows",
+            data: arrows,
+            // Offset half a cell so wind does not sit on top of current.
+            getPath: (d) => arrowPath(d, peak, arrowSpanDeg * 0.8, [0.35, 0.35]),
+            getColor: [...WIND_RGB, 150],
+            getWidth: 1.2,
+            widthMinPixels: 1.2,
+            widthMaxPixels: 3,
+            pickable: true,
+            updateTriggers: { getPath: [timeMs, arrowSpanDeg] },
+          }),
+        );
+      }
+    }
+
+    if (fieldVisible && fieldCanvas && activeField) {
       layers.push(
         new BitmapLayer({
-          id: "origin-field",
+          // Two ids, not one with a changing image: deck.gl keeps a
+          // layer's texture across prop updates, and reusing the id
+          // across a direction change makes the origin field flash in
+          // the forecast's colour for a frame as the scrubber crosses
+          // the acquisition instant.
+          id: frame.direction === "backward" ? "origin-field" : "forecast-field",
           image: fieldCanvas,
-          bounds: fieldRasterBounds(bundle.origin_field),
+          bounds: fieldRasterBounds(activeField),
           // Below the tracks and the detection outline, above the scene.
           // The field is context for those, not a foreground element.
           opacity: 1,
@@ -244,83 +353,260 @@ export default function MapView({
     }
 
     if (toggles.traffic) {
-      const trackData: { path: [number, number][]; color: [number, number, number]; mmsi: string }[] = [];
-      const gapLineData: { path: [number, number][]; mmsi: string }[] = [];
+      // Reported track and dark run are built as separate layers with
+      // separate styling, because the difference between them is the
+      // most important thing on this map. A solid line is a position the
+      // vessel broadcast. A dashed line is a position nobody recorded
+      // and this system reconstructed. Drawn alike, a reconstruction
+      // reads as evidence.
+      const reported: { path: [number, number][]; mmsi: string }[] = [];
+      const reckoned: { path: [number, number][]; mmsi: string }[] = [];
       const envelopeFeatures: GeoJSON.Feature[] = [];
+      const darkMarkers: { pos: [number, number]; mmsi: string; reachKm: number; mins: number }[] = [];
 
       for (const vessel of bundle.vessels) {
-        const color = vesselColor(vessel, bundle.culprit_mmsi);
-        const isFocused = vessel.mmsi === hoveredMmsi || vessel.mmsi === selectedMmsi;
-        for (const seg of trackSegments(vessel)) {
-          trackData.push({ path: seg, color: isFocused ? PAPER_RGB : color, mmsi: vessel.mmsi });
+        for (const seg of reportedSegments(vessel)) {
+          reported.push({ path: seg, mmsi: vessel.mmsi });
         }
         for (const gap of vessel.dark_gaps) {
+          reckoned.push({ path: deadReckonedPath(gap), mmsi: vessel.mmsi });
+          darkMarkers.push({
+            pos: darkMidpoint(gap),
+            mmsi: vessel.mmsi,
+            reachKm: darkReachKm(gap),
+            mins: gap.duration_min,
+          });
+          // The envelope is the largest thing on the map and it swamped
+          // everything when every vessel showed one at once. With a
+          // vessel selected only that vessel's is drawn; with none
+          // selected they are all drawn faintly, so the room can see
+          // there are several before being shown one.
+          const dimmed = selectedMmsi !== null && selectedMmsi !== vessel.mmsi;
+          if (dimmed) continue;
           envelopeFeatures.push({
             type: "Feature",
             geometry: gap.envelope,
-            properties: { mmsi: vessel.mmsi, kind: "dark-envelope" },
+            properties: {
+              mmsi: vessel.mmsi,
+              kind: "dark-envelope",
+              mins: Math.round(gap.duration_min),
+              reachKm: Math.round(darkReachKm(gap)),
+              focused: selectedMmsi === vessel.mmsi,
+            },
           });
-          gapLineData.push({ path: [gap.entry_point, gap.exit_point], mmsi: vessel.mmsi });
         }
       }
 
+      const envelopeAlpha = selectedMmsi ? 44 : 20;
       layers.push(
         new GeoJsonLayer({
           id: "dark-envelopes",
           data: { type: "FeatureCollection", features: envelopeFeatures } as any,
           filled: true,
           stroked: true,
-          getFillColor: [...SUSPECT_RGB, 30],
-          getLineColor: [...SUSPECT_RGB, 200],
+          getFillColor: [...SUSPECT_RGB, envelopeAlpha],
+          getLineColor: (f: any) => [...SUSPECT_RGB, f.properties.focused ? 220 : 120],
           lineWidthMinPixels: 2,
           getDashArray: [4, 3],
           dashJustified: true,
           extensions: [new PathStyleExtension({ dash: true })],
+          pickable: true,
+          updateTriggers: { getFillColor: [selectedMmsi], getLineColor: [selectedMmsi] },
         }),
         new PathLayer({
           id: "ais-tracks",
-          data: trackData,
+          data: reported,
           getPath: (d) => d.path,
-          getColor: (d) => [...d.color, 220],
-          getWidth: (d) => (d.mmsi === bundle.culprit_mmsi ? 3 : 2),
+          getColor: (d) => {
+            const v = bundle.vessels.find((x) => x.mmsi === d.mmsi)!;
+            return [...vesselColor(v, bundle.culprit_mmsi), vesselAlpha(d.mmsi, selectedMmsi, hoveredMmsi)];
+          },
+          getWidth: (d) =>
+            d.mmsi === selectedMmsi ? 4 : d.mmsi === bundle.culprit_mmsi ? 3 : 2,
           widthMinPixels: 2,
           pickable: true,
           onHover: (info) => onHoverVessel(info.object ? info.object.mmsi : null),
           onClick: (info) => onSelectVessel(info.object ? info.object.mmsi : null),
-          updateTriggers: { getColor: [hoveredMmsi, selectedMmsi] },
+          updateTriggers: {
+            getColor: [hoveredMmsi, selectedMmsi],
+            getWidth: [selectedMmsi],
+          },
         }),
         new PathLayer({
-          id: "dark-gap-lines",
-          data: gapLineData,
+          id: "dark-reckoned-path",
+          data: reckoned,
           getPath: (d) => d.path,
-          getColor: [...SUSPECT_RGB, 230],
-          getWidth: 2,
+          // Cream, not the vessel's own colour. It sits inside the
+          // red-tinted envelope, where red dashes are invisible, and it
+          // is an annotation on the chart rather than a measurement on
+          // it: this line is what the system inferred, and it should not
+          // be drawn in the same ink as what the vessel reported.
+          getColor: (d) => [...PAPER_RGB, vesselAlpha(d.mmsi, selectedMmsi, hoveredMmsi)],
+          getWidth: (d) => (d.mmsi === selectedMmsi ? 3 : 2),
           widthMinPixels: 2,
-          getDashArray: [3, 2],
+          getDashArray: [3, 3],
           dashJustified: true,
           extensions: [new PathStyleExtension({ dash: true })],
+          pickable: true,
+          onHover: (info) => onHoverVessel(info.object ? info.object.mmsi : null),
+          onClick: (info) => onSelectVessel(info.object ? info.object.mmsi : null),
+          updateTriggers: { getColor: [hoveredMmsi, selectedMmsi], getWidth: [selectedMmsi] },
+        }),
+        // A question mark at the point of maximum ignorance: furthest in
+        // time from the last reported position and the next one. It is
+        // the label the dashed line needs to stop reading as a track.
+        new TextLayer({
+          id: "dark-midpoint-markers",
+          data: darkMarkers,
+          getPosition: (d) => d.pos,
+          getText: () => "?",
+          getColor: (d) => [...PAPER_RGB, vesselAlpha(d.mmsi, selectedMmsi, hoveredMmsi)],
+          getSize: 15,
+          fontFamily: '"IBM Plex Mono", monospace',
+          fontWeight: 700,
+          getTextAnchor: "middle",
+          getAlignmentBaseline: "center",
+          pickable: true,
+          onHover: (info) => onHoverVessel(info.object ? info.object.mmsi : null),
+          updateTriggers: { getColor: [hoveredMmsi, selectedMmsi] },
         }),
       );
 
       const positions = bundle.vessels
-        .map((v) => ({ vessel: v, pos: positionAt(v.points, timeMs) }))
-        .filter((d): d is { vessel: VesselJSON; pos: [number, number] } => d.pos !== null);
+        .map((v) => ({
+          vessel: v,
+          pos: positionAt(v.points, timeMs),
+          heading: headingAt(v.points, timeMs),
+          dark: v.dark_gaps.some((g) => isDarkGapActive(g, timeMs)),
+          rank: rankOf(bundle, v.mmsi),
+        }))
+        .filter((d): d is typeof d & { pos: [number, number] } => d.pos !== null);
 
       layers.push(
         new ScatterplotLayer({
           id: "vessel-positions",
           data: positions,
           getPosition: (d) => d.pos,
-          getFillColor: (d) => [...vesselColor(d.vessel, bundle.culprit_mmsi), 255],
-          getLineColor: [...PAPER_RGB, 255],
-          getLineWidth: 1,
+          // A vessel dark at this instant is drawn hollow: there is no
+          // report behind that dot, only a reconstruction. Filled means
+          // observed, hollow means inferred, exactly as with the lines.
+          filled: true,
+          getFillColor: (d) =>
+            d.dark
+              ? [...hexToRgb(COLORS.ink), vesselAlpha(d.vessel.mmsi, selectedMmsi, hoveredMmsi)]
+              : [...vesselColor(d.vessel, bundle.culprit_mmsi), vesselAlpha(d.vessel.mmsi, selectedMmsi, hoveredMmsi)],
           stroked: true,
+          getLineColor: (d) => [
+            ...vesselColor(d.vessel, bundle.culprit_mmsi),
+            vesselAlpha(d.vessel.mmsi, selectedMmsi, hoveredMmsi),
+          ],
+          getLineWidth: 2,
+          lineWidthMinPixels: 2,
           getRadius: (d) => (d.vessel.mmsi === bundle.culprit_mmsi ? 60 : 40),
-          radiusMinPixels: 4,
-          radiusMaxPixels: 12,
+          radiusMinPixels: 5,
+          radiusMaxPixels: 13,
           pickable: true,
           onHover: (info) => onHoverVessel(info.object ? info.object.vessel.mmsi : null),
           onClick: (info) => onSelectVessel(info.object ? info.object.vessel.mmsi : null),
+          updateTriggers: {
+            getFillColor: [hoveredMmsi, selectedMmsi, timeMs],
+            getLineColor: [hoveredMmsi, selectedMmsi],
+          },
+        }),
+        // Heading, from the vessel's own reported course, so the eye can
+        // tell which way a track is being travelled. Without it a line
+        // between two points is equally a vessel arriving and one
+        // leaving, and which of those it is decides the whole case.
+        new TextLayer({
+          id: "vessel-headings",
+          data: positions.filter((d) => d.heading !== null),
+          getPosition: (d) => d.pos,
+          getText: () => "\u25B2",
+          getAngle: (d) => -(d.heading ?? 0),
+          getColor: (d) => [
+            ...vesselColor(d.vessel, bundle.culprit_mmsi),
+            vesselAlpha(d.vessel.mmsi, selectedMmsi, hoveredMmsi),
+          ],
+          getSize: 11,
+          getPixelOffset: [0, -14],
+          getTextAnchor: "middle",
+          getAlignmentBaseline: "center",
+          updateTriggers: { getColor: [hoveredMmsi, selectedMmsi], getAngle: [timeMs] },
+        }),
+        // The MMSI, on the map, next to the vessel. Without it the
+        // ranked list on the right and the lines on the left are two
+        // unconnected displays and the room has to be told which is
+        // which out loud.
+        new TextLayer({
+          id: "vessel-labels",
+          data: positions,
+          getPosition: (d) => d.pos,
+          getText: (d) => (d.rank ? `#${d.rank}  ${d.vessel.mmsi}` : d.vessel.mmsi),
+          getColor: (d) => [
+            ...(d.vessel.mmsi === selectedMmsi ? PAPER_RGB : vesselColor(d.vessel, bundle.culprit_mmsi)),
+            vesselAlpha(d.vessel.mmsi, selectedMmsi, hoveredMmsi),
+          ],
+          getSize: (d) => (d.vessel.mmsi === selectedMmsi ? 13 : 11),
+          fontFamily: '"IBM Plex Mono", monospace',
+          getTextAnchor: "start",
+          getAlignmentBaseline: "top",
+          getPixelOffset: [12, 6],
+          background: true,
+          getBackgroundColor: [...hexToRgb(COLORS.ink), 190],
+          backgroundPadding: [4, 2, 4, 2],
+          pickable: true,
+          onHover: (info) => onHoverVessel(info.object ? info.object.vessel.mmsi : null),
+          onClick: (info) => onSelectVessel(info.object ? info.object.vessel.mmsi : null),
+          updateTriggers: {
+            getColor: [hoveredMmsi, selectedMmsi],
+            getSize: [selectedMmsi],
+            getText: [bundle],
+          },
+        }),
+      );
+    }
+
+    // Ship targets the SAR scene itself shows. Drawn above the tracks,
+    // because the whole argument of PLAN.md section 11 is that an
+    // unmatched target is an observation from a second, independent
+    // sensor sitting on top of the AIS picture, not part of it.
+    const radar = bundle.radar_crosscheck;
+    if (toggles.radar && radar) {
+      const unmatched = radar.targets.filter((t) => t.matched_mmsi === null);
+      const matched = radar.targets.filter((t) => t.matched_mmsi !== null);
+      layers.push(
+        // Matched hulls are drawn faintly and hollow. They are the
+        // control: a cross check that matches nothing is a broken
+        // matcher, not a fleet of dark vessels, and you cannot see the
+        // difference unless both are on screen.
+        new ScatterplotLayer({
+          id: "radar-targets-matched",
+          data: matched,
+          getPosition: (d) => d.centroid,
+          filled: false,
+          stroked: true,
+          getLineColor: [...RADAR_RGB, 120],
+          getLineWidth: 2,
+          lineWidthMinPixels: 2,
+          getRadius: 80,
+          radiusMinPixels: 5,
+          radiusMaxPixels: 11,
+          pickable: true,
+        }),
+        new ScatterplotLayer({
+          id: "radar-targets-unmatched",
+          data: unmatched,
+          getPosition: (d) => d.centroid,
+          filled: true,
+          stroked: true,
+          getFillColor: [...RADAR_RGB, 210],
+          getLineColor: [...PAPER_RGB, 255],
+          getLineWidth: 2,
+          lineWidthMinPixels: 2,
+          getRadius: 110,
+          radiusMinPixels: 7,
+          radiusMaxPixels: 15,
+          pickable: true,
         }),
       );
     }
@@ -352,20 +638,84 @@ export default function MapView({
       layers,
       getTooltip: ({ object, layer }: any) => {
         if (!object) return null;
+        const wrap = (title: string, body: string) =>
+          ({
+            html:
+              `<div style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;max-width:290px">` +
+              `<div style="color:${COLORS.paper};font-weight:600">${title}</div>` +
+              `<div style="color:${COLORS.muted}">${body}</div></div>`,
+          });
+
         if (layer?.id === "detections") {
           const g = object.properties.gate;
-          return {
-            html: `<div style="font-family:monospace;font-size:11px">verdict: ${g.verdict}<br/>${g.reason}</div>`,
-          };
+          return wrap(
+            `Detection, wind gate ${g.verdict}`,
+            `${g.reason}<br/>Wind ${g.wind_speed_ms.toFixed(1)} m/s at acquisition.`,
+          );
+        }
+        if (layer?.id?.startsWith("radar-targets")) {
+          const t = object as ShipTargetJSON;
+          const state = t.matched_mmsi
+            ? `Matched to AIS ${t.matched_mmsi} at ${Math.round(t.match_distance_m ?? 0)} m.`
+            : "No AIS reported this hull at the acquisition instant. The radar image saw it, the AIS picture did not.";
+          const hits = t.envelope_hits.length
+            ? `<br/>Inside the dark envelope of ${t.envelope_hits.join(", ")}.`
+            : "";
+          return wrap(
+            `Radar ship target ${t.target_id}`,
+            `${t.pixel_area} px, ${t.mean_backscatter_db.toFixed(1)} dB.<br/>${state}${hits}` +
+              "<br/>Radar sees one instant only: this says nothing about any other time.",
+          );
+        }
+        if (layer?.id === "dark-envelopes") {
+          const p = object.properties;
+          return wrap(
+            `${p.mmsi}: reachable while dark`,
+            `Everywhere this vessel could have been during a ${p.mins} minute silence, ` +
+              `dead-reckoned at its plausible maximum speed (about ${p.reachKm} km of reach). ` +
+              "Not where it was. Where it could not be ruled out from.",
+          );
+        }
+        if (layer?.id === "dark-reckoned-path" || layer?.id === "dark-midpoint-markers") {
+          return wrap(
+            `${object.mmsi}: estimated track while dark`,
+            "A straight run from the last reported position to the first one after the silence. " +
+              "An assumption of steady course and speed, not an observation. The shaded ring is " +
+              "everywhere else it could have gone instead.",
+          );
+        }
+        if (layer?.id === "ais-tracks") {
+          const v = bundle.vessels.find((x) => x.mmsi === object.mmsi);
+          return wrap(`${object.mmsi}: reported AIS track`, v ? vesselSummary(bundle, v) : "");
+        }
+        if (layer?.id === "vessel-positions" || layer?.id === "vessel-labels") {
+          const v = object.vessel as VesselJSON;
+          const where = object.dark
+            ? "Dark at this instant: this position is reconstructed, not reported."
+            : "Position as broadcast at this instant.";
+          return wrap(
+            `${v.mmsi}  ${v.vessel_type}`,
+            `${where}<br/>${vesselSummary(bundle, v)}`,
+          );
+        }
+        if (layer?.id === "current-arrows" || layer?.id === "wind-arrows") {
+          const isWind = layer.id === "wind-arrows";
+          return wrap(
+            isWind ? "10 m wind" : "Surface current",
+            `${object.speed.toFixed(2)} m/s towards ${Math.round(object.towardDeg)} degrees.<br/>` +
+              "Forcing the drift ensemble integrated. Context, never scored.",
+          );
         }
         return null;
       },
     });
   }, [
     bundle,
-    timeIndex,
+    frame,
     timeMs,
     toggles,
+    activeField,
+    fieldVisible,
     sceneImageSrc,
     fieldCanvas,
     hoveredMmsi,

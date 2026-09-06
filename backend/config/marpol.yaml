@@ -1,0 +1,51 @@
+# MARPOL Annex I evaluation thresholds and assumptions. See PLAN.md section 13.
+#
+# HARD RULE, restated here because this is the file someone will edit
+# first: this layer never outputs a determination of illegality. It
+# reports which conditions the reconstructed behaviour appears not to
+# satisfy, with its assumptions attached. Oil content in parts per
+# million is not observable from satellite, so `conditions_met` can
+# never be asserted on that basis and the code must not attempt it.
+
+# Regulation 15, machinery space bilge discharge outside special areas:
+# the ship must be proceeding en route, more than 12 nautical miles from
+# the nearest land, and the oil content of the effluent must not exceed
+# 15 parts per million.
+machinery_space:
+  min_distance_to_land_nm: 12.0
+  max_oil_content_ppm: 15.0
+
+# Regulation 34, cargo area discharge from an oil tanker outside special
+# areas: outside a special area, more than 50 nautical miles from the
+# nearest land, proceeding en route, and at an instantaneous rate of
+# discharge not exceeding 30 litres per nautical mile.
+cargo_area:
+  min_distance_to_land_nm: 50.0
+  max_discharge_l_per_nm: 30.0
+
+# "Proceeding en route" is not defined as a speed in the regulation. It
+# means under way on a passage, not stopped or manoeuvring to spread a
+# discharge. This is the operational proxy, and it is printed as an
+# assumption on every assessment rather than hidden here.
+en_route_min_sog_kn: 4.0
+
+# Slick thickness band, in micrometres, used to turn an observed area
+# into a volume. SAR sees the presence of a damping film, never its
+# thickness, so this is a band spanning the sheen-to-thin-film range
+# from the Bonn Agreement Oil Appearance Code, and the resulting
+# discharge rate is reported as a band across it. Never a scalar.
+thickness_band_um: [0.3, 5.0]
+
+# Static layers. Both are small and committed, so the assessment runs
+# with the network cable unplugged.
+coastline_path: data/fixtures/coastline.geojson
+special_areas_path: data/fixtures/marpol_special_areas.geojson
+
+# Printed verbatim in the dossier, in this order, on every assessment.
+assumptions:
+  - "Slick thickness is not observable from SAR. Volume is derived from a thickness band spanning the Bonn Agreement sheen to thin film range, so the discharge rate is reported as a band and never as a single figure."
+  - "Proceeding en route is evaluated as a speed over ground threshold, which is an operational proxy. The regulation defines the term by the vessel being under way on a passage, not by a speed."
+  - "Oil content in parts per million is not observable from satellite. No condition depending on it is ever evaluated as met."
+  - "Distance to nearest land is measured against a generalised coastline layer, not a survey-grade baseline, and territorial sea baselines are not modelled."
+  - "The track inside the origin field is a reconstruction from AIS, interpolated between pings, and carries the uncertainty of that reconstruction."
+  - "This assessment is a screening aid for a human investigator. It is not a determination that any regulation was breached."

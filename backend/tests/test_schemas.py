@@ -154,3 +154,102 @@ def test_ais_track_with_dark_gap_round_trips_through_json():
     restored = AISTrack.model_validate_json(track.model_dump_json())
     assert restored == track
     assert len(restored.dark_gaps) == 1
+
+
+# --- Contracts added in the current PLAN.md revision (section 4) ---
+
+
+def test_ship_target_defaults_to_unmatched():
+    """An unmatched target is the interesting one, and it is what a
+    freshly extracted target is until crosscheck/radar.py says
+    otherwise. Defaulting the other way would quietly assert that every
+    hull was accounted for."""
+    from services.core.schemas import ShipTarget
+
+    target = ShipTarget(
+        target_id="t-1", scene_id="S-1", centroid=(68.0, 17.0),
+        pixel_area=64, mean_backscatter_db=-4.0,
+    )
+    assert target.matched_mmsi is None
+    assert target.match_confidence == 0.0
+    assert ShipTarget.model_validate_json(target.model_dump_json()) == target
+
+
+def test_marpol_discharge_must_be_an_ordered_band():
+    """PLAN.md section 4 contract rule: est_discharge_l_per_nm is a
+    band, never a scalar. SAR cannot see slick thickness, so the volume
+    behind this rate is only ever known to an order of magnitude."""
+    import pytest as _pytest
+    from pydantic import ValidationError
+
+    from services.core.schemas import MarpolAssessment
+
+    ok = MarpolAssessment(mmsi="419000001", est_discharge_l_per_nm=(12.0, 200.0), flag="conditions_not_met")
+    assert ok.est_discharge_l_per_nm[1] > ok.est_discharge_l_per_nm[0]
+    assert MarpolAssessment.model_validate_json(ok.model_dump_json()) == ok
+
+    with _pytest.raises(ValidationError):
+        MarpolAssessment(mmsi="419000001", est_discharge_l_per_nm=(200.0, 12.0), flag="conditions_not_met")
+
+
+def test_case_verdict_requires_a_reason():
+    """A verdict class with no reasoning is a label, and a label is not
+    evidence. Empty reasoning must not construct."""
+    import pytest as _pytest
+    from pydantic import ValidationError
+
+    from services.core.schemas import CaseVerdict
+
+    with _pytest.raises(ValidationError):
+        CaseVerdict(case_id="C-1", verdict="ATTRIBUTED", reasoning="")
+
+
+def test_integrity_flag_severity_is_bounded():
+    import pytest as _pytest
+    from pydantic import ValidationError
+
+    from services.core.schemas import IntegrityFlag
+
+    with _pytest.raises(ValidationError):
+        IntegrityFlag(kind="no_imo", at="2026-01-14T10:00:00Z", detail="d", severity=1.5)
+
+
+def test_suspect_score_still_sums_with_the_two_new_factors():
+    """The invariant that makes the score auditable, re-checked now that
+    F7 and F8 are in the factor set."""
+    from services.core.schemas import SuspectScore
+
+    factors = {
+        "field_integral": 1.2, "dark_overlap": 0.8, "axis_alignment": 0.3,
+        "speed_anomaly": 0.1, "course_anomaly": -0.2, "vessel_plausibility": 0.05,
+        "ais_integrity": 0.4, "radar_confirmed_dark": 2.1,
+    }
+    score = SuspectScore(
+        mmsi="419000001", total=sum(factors.values()), factors=factors, rank=1, narrative="n",
+        radar_support="t-unmatched",
+    )
+    assert score.radar_support == "t-unmatched"
+    assert SuspectScore.model_validate_json(score.model_dump_json()) == score
+
+
+def test_optical_corroboration_has_exactly_three_states():
+    import pytest as _pytest
+    from pydantic import ValidationError
+
+    from services.core.schemas import OpticalCorroboration
+
+    for status in ("agree", "disagree", "no_coverage"):
+        OpticalCorroboration(detection_id="d", status=status, reasoning="r")
+    with _pytest.raises(ValidationError):
+        OpticalCorroboration(detection_id="d", status="probably", reasoning="r")
+
+
+def test_origin_field_records_which_kernel_produced_it():
+    from services.core.schemas import OriginField
+
+    field = OriginField(
+        field_id="f-1", detection_id="d-1", path="x.nc",
+        t_min="2026-01-13T02:30:00Z", t_max="2026-01-15T02:30:00Z",
+        n_members=30, seed=26143, kernel="leeway",
+    )
+    assert OriginField.model_validate_json(field.model_dump_json()).kernel == "leeway"

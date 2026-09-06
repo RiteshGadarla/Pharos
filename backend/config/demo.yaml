@@ -1,15 +1,29 @@
 # The hero scenario definition. See PLAN.md section 4A item 5 and section 9.
 #
+# Synthetic AIS is explicitly authorised by the problem statement. The
+# sentence, verbatim from NTRO PS 26143:
+#
+#   "Real AIS if available may be used else synthetic data can be
+#    prepared for the region of oil spill to demonstrate the functioning
+#    of the algorithm."
+#
+# Permission is not an excuse to be sloppy. Lane geometry, vessel type
+# mix, speed distributions, ping intervals and dropout rates are fitted
+# from real MarineCadastre files, the format authority the PS itself
+# names; only the incident is injected. The database schema mirrors the
+# MarineCadastre columns so a real ICG or DGLL feed drops in with no
+# code change.
+#
 # This is a deliberately illustrative scenario, not a re-investigation of
 # any specific real, already-resolved spill (a real collision like the
 # 2010 MSC Chitra / Khalijia III incident off Mumbai has a known cause,
 # so running a synthetic attribution pipeline against it would look like
 # inventing a culprit for a solved case). Instead source_reference below
 # grounds *why this matters* in real documented Eastern Arabian Sea
-# pollution: exactly the "who did this" gap SLICKTRACE targets.
+# pollution: exactly the "who did this" gap DRISHTA targets.
 
 incident:
-  case_id: "SLICKTRACE-DEMO-0001"
+  case_id: "DRISHTA-DEMO-0001"
   status: "illustrative scenario, not a real incident. See the comment above and source_reference."
   date: "2026-01-15T02:30:00Z"   # illustrative acquisition time, matches scripts/seed_demo.py ACQUIRED_AT
   bbox: [67.9758, 17.0267, 68.0242, 17.0733]  # illustrative, matches the fixture scene's footprint
@@ -38,9 +52,28 @@ synthetic_ais:
       behaviour: "dark gap far from the field"
     - mmsi: "419000004"
       behaviour: "spatially close throughout, constant transit speed, no dark gap"
+    - mmsi: "419000005"
+      behaviour: >
+        dark gap overlapping the field, but no unmatched radar target in
+        the scene inside its envelope, so F8 does not fire for it. This
+        negative exists specifically to prove F8 discriminates rather
+        than merely rewarding darkness (PLAN.md section 10).
+
+# Ship targets extracted from the SAR scene itself (PLAN.md section 11).
+# One unmatched target is injected inside the culprit's dark envelope:
+# a hull the radar photographed that AIS did not report.
+radar_crosscheck:
+  unmatched_target_note: >
+    The unmatched target is placed inside the culprit's dead-reckoned
+    dark envelope and inside the origin field's mass. Not every
+    unmatched target is evasion: vessels below AIS carriage
+    requirements, fishing craft and buoys all appear, and Sentinel-1
+    misses small vessels at GRD resolution. The dossier reports count,
+    size and position with those caveats, and never asserts that
+    unmatched equals guilty.
 
 rewind_sequence:
-  total_duration_s: 45
+  total_duration_s: 49
   beats:
     - {id: 0, name: hold, duration_s: 3}
     - {id: 1, name: dissolve, duration_s: 3}
@@ -49,4 +82,5 @@ rewind_sequence:
     - {id: 4, name: traffic, duration_s: 6}
     - {id: 5, name: elimination, duration_s: 8}
     - {id: 6, name: dark_gap, duration_s: 5}
+    - {id: 6.5, name: radar, duration_s: 4}
     - {id: 7, name: verdict, duration_s: 4}

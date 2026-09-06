@@ -1,4 +1,4 @@
-# Evidence scoring weights and thresholds. See PLAN.md section 10.
+# Evidence scoring weights, thresholds and verdict rules. See PLAN.md section 12.
 #
 # Weighted sum in log-odds space. Weights are relative, not probabilities.
 # F6 (vessel_plausibility) downweights only. It must never be able to
@@ -50,6 +50,61 @@ factors:
       eliminates. Kept low deliberately: attributing pollution by vessel
       class alone is exactly the shortcut a jury should attack.
 
+  ais_integrity:
+    label: "F7: AIS integrity"
+    weight: 1.25
+    description: >
+      Aggregated severity of the AIS self-report inconsistencies found
+      inside the origin window (ais/integrity.py): missing IMO, implied
+      speed beyond the vessel's plausible maximum, static or voyage data
+      changing mid passage, MMSI reuse, position jumps inconsistent with
+      reported course and speed. This exists so that "AIS can be
+      spoofed, not just switched off" is answered with a factor rather
+      than a shrug. Weighted below the two headline factors because a
+      single flag is often a data quality artifact rather than evasion.
+
+  radar_confirmed_dark:
+    label: "F8: radar confirmed dark"
+    weight: 3.0
+    description: >
+      An unmatched ship target extracted from the SAR scene itself fell
+      inside this vessel's dead-reckoned dark envelope AND in a cell of
+      the origin field above eps. Scaled by the probability mass at that
+      cell and by the radar-to-AIS match confidence.
+      Weighted equal to F1, the highest in the model, and here is the
+      justification: every other factor is an inference drawn from what
+      the vessel chose to report about itself. F8 is the only one backed
+      by a second, independent sensor observing a hull that AIS did not
+      report at all. It converts a dark period from an absence of
+      evidence into a positive observation.
+      It still never convicts alone. Sentinel-1 misses small vessels at
+      GRD resolution, and an unmatched target may be a fishing craft
+      below AIS carriage requirements or a buoy, so the dossier reports
+      unmatched target count, size and position with those caveats
+      attached (PLAN.md section 11).
+
+  temporal_consistency:
+    label: "F9: temporal consistency"
+    weight: 0.75
+    description: >
+      How close the vessel's best opportunity to be the source sits to
+      the origin window the slick's own condition implies. F1 already
+      weights the field's time axis by that window, but it does so
+      inside an integral over space, so timing is invisible there and a
+      lot of mass at the wrong hour can look like a little mass at the
+      right one. This asks the timing question on its own, with space
+      marginalised out, so it can be shown as its own step in the case
+      build and argued with.
+      Weighted at 0.75, level with F5 and deliberately not higher.
+      Because this factor runs through a logit it swings both ways, so
+      its full range is weight x 5.89, and at a weight of 1.0 that came
+      to 5.89 against the 5.5 that F1 and F2 can muster between them:
+      timing could outvote the origin field itself. It is derived from
+      the age band, which is heuristic radiometry, so like F6 it must
+      shade a ranking and never decide one. tests/
+      test_temporal_consistency.py holds the bound.
+
+
 elimination:
   # Applied before scoring. Nothing here may fire from vessel_plausibility.
   no_temporal_overlap:
@@ -64,7 +119,104 @@ elimination:
     rule: INSUFFICIENT_TRACK
     reason: "Fewer than the minimum number of AIS pings were recorded in the window, so the reconstructed track is not reliable enough to score."
 
+# Verdict classes. See PLAN.md section 12, "Verdict assignment".
+#
+# DARK_CONFIRMED is a positive finding, not a failure state: a vessel
+# absent from the AIS picture was present in the origin envelope, and
+# radar saw the hull.
+verdict:
+  # How far rank 1 must beat rank 2, in the engine's own combined score,
+  # before one vessel counts as dominant rather than merely first.
+  dominance_margin: 1.5
+  # Below this combined score no broadcasting vessel counts as a
+  # plausible candidate, which is one half of the DARK_CONFIRMED test.
+  dark_floor: 0.0
+  # Minimum origin probability at an unmatched radar target's cell for
+  # that target to count as sitting inside the origin field.
+  eps: 1.0e-6
+
+# Age band to origin time window. See PLAN.md sections 8 and 12.
+#
+# The slick's characterisation is the only evidence in the system about
+# WHEN the discharge happened, and until this block existed it was
+# computed, printed in the dossier and shown in the UI without ever
+# reaching the scoring engine. The backward field says where the oil
+# could have come from at every hour of the horizon; the age band says
+# which of those hours are plausible.
+#
+# Read these as bounds on a relative band, never as a measurement.
+# PLAN.md's non-goals are explicit that absolute slick age in hours is
+# not recoverable from a single SAR acquisition, and nothing here
+# recovers it. The bands are wide, they deliberately overlap, and the
+# weight tapers rather than cutting off, because the boundary between a
+# compact slick and a spreading one is not sharp and scoring it as
+# though it were would invent precision the radiometry cannot support.
+#
+# The numbers are heuristic, chosen against the 48 hour backward
+# horizon. Oil spreads and its contrast falls as it weathers, so a
+# compact high-contrast slick has had less time on the surface than a
+# fragmented low-contrast one. That ordering is defensible; the exact
+# hours are a judgement call and are exposed here so they can be argued
+# with rather than buried in code.
+age_origin_window:
+  # Hours before acquisition, [earliest, latest], within which the
+  # discharge is taken to be plausible for each band.
+  bands:
+    fresh: [0, 12]
+    intermediate: [6, 30]
+    weathered: [24, 48]
+  # Linear taper outside each band, in hours, over which the weight
+  # falls from 1 to 0. A discharge an hour outside the band is barely
+  # less plausible than one an hour inside it, and a hard edge would
+  # score it as impossible.
+  taper_hours: 6.0
+  # Weight applied to timesteps fully outside the band and its taper.
+  # Deliberately not zero: the age band is one piece of evidence, it is
+  # heuristic, and it must not be able to eliminate a vessel on its own
+  # any more than F6 can. A vessel that was in the origin field at the
+  # wrong time is downweighted, never excluded.
+  floor_weight: 0.15
+
+# F9 temporal consistency. See PLAN.md sections 8 and 12 and
+# scoring/temporal.py.
+#
+# The band edge is not a cliff, and this block is where that is
+# enforced. If the discharge really happened 14 hours ago and the
+# slick's contrast puts the band at 0 to 12, every vessel that passed in
+# those extra two hours is a live candidate. Burying them would not be
+# strictness, it would be treating a radiometric band as though it
+# resolved differences it cannot resolve.
+temporal_consistency:
+  # How far past the window edge a vessel still scores exactly as though
+  # it were inside it. This is the band's own uncertainty, not a
+  # tolerance granted out of generosity, and it is the reason a vessel
+  # at -14 h against an 0 to 12 h band loses nothing at all.
+  band_uncertainty_hours: 3.0
+  # Gaussian scale of the falloff BEYOND that margin, in hours. Roughly:
+  # little is lost in the first few hours past the margin, the middle of
+  # the range is steep, and past about 24 hours the score has bottomed
+  # out and stays there.
+  falloff_hours: 8.0
+
+
 dark_gap:
   min_duration_minutes: 20
+
+# AIS integrity severities, F7. Each flag kind contributes this much
+# before aggregation. Deliberately explicit rather than learned, per
+# non-negotiable 3.
+integrity:
+  severities:
+    no_imo: 0.3
+    implied_speed: 0.8
+    static_change: 0.5
+    mmsi_reuse: 0.9
+    position_jump: 0.7
+  # Implied speed above this, in knots, between consecutive pings is
+  # not a vessel, it is a reporting error or a spoof.
+  implied_speed_max_kn: 30.0
+  # A position discontinuity larger than this many km beyond what the
+  # reported course and speed can explain fires position_jump.
+  position_jump_tolerance_km: 5.0
 
 seed: 26143

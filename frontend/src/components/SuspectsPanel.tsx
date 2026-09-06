@@ -64,6 +64,21 @@ export default function SuspectsPanel({ bundle, hoveredMmsi, selectedMmsi, onHov
                       </div>
                     );
                   })}
+                {s.radar_support && (
+                  <p className="suspect-radar">
+                    Radar support: {s.radar_support}. An unmatched ship target in the SAR scene fell inside
+                    this vessel's dead-reckoned dark envelope, over live origin field mass.
+                  </p>
+                )}
+                {vessel?.integrity_flags && vessel.integrity_flags.length > 0 && (
+                  <ul className="suspect-flags">
+                    {vessel.integrity_flags.map((flag, i) => (
+                      <li key={`${flag.kind}-${i}`}>
+                        <span className="mono">{flag.kind}</span> {flag.detail}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <p className="suspect-narrative">{s.narrative}</p>
               </div>
             )}

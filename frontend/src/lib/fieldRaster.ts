@@ -3,6 +3,14 @@ import { hexToRgb } from "./tokens";
 import { COLORS } from "./tokens";
 
 const OIL_RGB = hexToRgb(COLORS.oil);
+const FORECAST_RGB = hexToRgb(COLORS.forecast);
+
+// The ramp for a field is decided by which way its time ran, not by the
+// caller. A forecast drawn in the slick's own colour would let a
+// prediction borrow the authority of an observation.
+export function fieldRamp(field: OriginFieldJSON): [number, number, number] {
+  return field.direction === "forward" ? FORECAST_RGB : OIL_RGB;
+}
 
 // Rasterises one time slice of the origin probability field into a
 // canvas the size of the field's own grid, one texel per cell.
@@ -34,15 +42,16 @@ export function fieldSliceToCanvas(
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
 
+  const rgb = fieldRamp(field);
   const image = ctx.createImageData(width, height);
   for (let yi = 0; yi < height; yi++) {
     // field.lat runs south to north, image rows run north to south.
     const row = slice[height - 1 - yi];
     for (let xi = 0; xi < width; xi++) {
       const o = (yi * width + xi) * 4;
-      image.data[o] = OIL_RGB[0];
-      image.data[o + 1] = OIL_RGB[1];
-      image.data[o + 2] = OIL_RGB[2];
+      image.data[o] = rgb[0];
+      image.data[o + 1] = rgb[1];
+      image.data[o + 2] = rgb[2];
       image.data[o + 3] = Math.round(alphaFor(row[xi]));
     }
   }

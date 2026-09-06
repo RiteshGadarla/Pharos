@@ -1,4 +1,4 @@
-"""Runs the validation harness (PLAN.md section 13) and writes
+"""Runs the validation harness (PLAN.md section 17.1) and writes
 data/processed/validation.md.
 
 Run from backend/: PYTHONPATH=. .venv/bin/python scripts/run_validation.py
@@ -10,7 +10,7 @@ import datetime
 
 import yaml
 
-from services.core.validation.harness import TRAFFIC_DENSITY_LEVELS, Accuracy, run_validation
+from validation.harness import TRAFFIC_DENSITY_LEVELS, Accuracy, run_validation
 
 OUT_PATH = "data/processed/validation.md"
 N_INCIDENTS = 50
@@ -42,9 +42,10 @@ def format_report(summary: dict) -> str:
     overall: Accuracy = summary["overall"]
     no_dark: Accuracy = summary["ablation_no_dark_overlap"]
     centroid: Accuracy = summary["ablation_centroid_baseline"]
+    no_radar: Accuracy = summary["ablation_no_radar"]
 
     lines = []
-    lines.append("# SLICKTRACE scoring validation")
+    lines.append("# DRISHTA scoring validation")
     lines.append("")
     lines.append(f"Generated {datetime.datetime.utcnow().isoformat()}Z, {summary['n_incidents']} synthetic incidents.")
     lines.append("")
@@ -82,9 +83,9 @@ def format_report(summary: dict) -> str:
     lines.append("## Ablations")
     lines.append("")
     lines.append(
-        "Both ablations rerun the same 50 incidents with one deliberate change to "
-        "the scoring, holding elimination and everything else fixed, to check "
-        "whether SLICKTRACE's two claimed differentiators actually matter. Rank-1 "
+        "The three ablations rerun the same 50 incidents with one deliberate change "
+        "to the scoring, holding elimination and everything else fixed, to check "
+        "whether DRISHTA's three claimed differentiators actually matter. Rank-1 "
         "accuracy only moves when a competitor's score actually overtakes the "
         "culprit's; margin (the culprit's score minus the best competitor's, mean "
         "across incidents) shows the effect even when it isn't yet large enough to "
@@ -104,6 +105,11 @@ def format_report(summary: dict) -> str:
         f"| F1 replaced by distance to the field's own centroid | {_pct(centroid.rank1_accuracy)} | "
         f"{drop_centroid * 100:+.0f} pp | {centroid.mean_margin:.2f} |"
     )
+    drop_radar = overall.rank1_accuracy - no_radar.rank1_accuracy
+    lines.append(
+        f"| F8 (radar confirmed dark) zeroed out | {_pct(no_radar.rank1_accuracy)} | "
+        f"{drop_radar * 100:+.0f} pp | {no_radar.mean_margin:.2f} |"
+    )
     lines.append("")
     lines.append(
         "The centroid-distance row is the naive baseline PLAN.md's non-negotiable 1 "
@@ -114,13 +120,25 @@ def format_report(summary: dict) -> str:
     lines.append(_margin_commentary(overall, no_dark, "F2 (dark overlap) zeroed out"))
     lines.append("")
     lines.append(_margin_commentary(overall, centroid, "F1 replaced by distance to the centroid"))
+    lines.append("")
+    lines.append(_margin_commentary(overall, no_radar, "F8 (radar confirmed dark) zeroed out"))
+    lines.append("")
+    lines.append(
+        "Ablation C measures what the SAR ship target cross check adds on top of the "
+        "AIS evidence alone. Every incident carries a radar cross check built from "
+        "the same synthetic ship targets the demo scenario uses: one target per "
+        "broadcasting vessel at its acquisition-time position, plus one unmatched "
+        "target inside the culprit's dead-reckoned dark envelope. The ship targets "
+        "are synthetic, like the AIS. The matching, the envelope test and the field "
+        "test all run for real on them."
+    )
 
     near_miss = summary["near_miss"]
     lines.append("")
     lines.append("### The right-place-wrong-time case")
     lines.append("")
     lines.append(
-        "Every incident also includes one purpose-built decoy (MMSI 419000005): it "
+        "Every incident also includes one purpose-built decoy (MMSI 419000009): it "
         "passes directly through the field's own probability peak, but hours before "
         "the field's time window opens, then barely re-enters the window at its low "
         "probability edge, just enough to survive elimination. This is the specific "
@@ -132,7 +150,7 @@ def format_report(summary: dict) -> str:
             f"It survived elimination and reached scoring in {near_miss['n']} of {N_INCIDENTS} incidents. "
             f"Real scoring (time-weighted F1) gives it a mean total of {near_miss['mean_baseline_total']:.2f}. "
             f"The centroid ablation, blind to when its close pass happened, gives it a mean total of "
-            f"{near_miss['mean_centroid_total']:.2f} -- "
+            f"{near_miss['mean_centroid_total']:.2f}, "
             f"{near_miss['mean_centroid_total'] - near_miss['mean_baseline_total']:+.2f} relative to real scoring: "
             "exactly the direction the design predicts, since the centroid metric cannot see that its close "
             "pass happened outside the window. Whether that specific shift is ever large enough to overtake "
@@ -153,7 +171,13 @@ def main() -> None:
     ais_config = pipeline_config["ais"]
 
     print(f"Running {N_INCIDENTS} synthetic incidents...")
-    summary = run_validation(N_INCIDENTS, scoring_config["seed"], ais_config, scoring_config)
+    summary = run_validation(
+        N_INCIDENTS,
+        scoring_config["seed"],
+        ais_config,
+        scoring_config,
+        radar_config=pipeline_config.get("radar_crosscheck"),
+    )
 
     report = format_report(summary)
     print(report)

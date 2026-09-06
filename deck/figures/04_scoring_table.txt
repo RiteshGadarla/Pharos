@@ -1,0 +1,24 @@
+DRISHTA  case DRISHTA-DEMO-0001
+verdict  RANKED
+
+RANKED SUSPECTS
+
+rank  mmsi       type        total       F1       F2       F3       F4       F5       F6       F7       F8
+----------------------------------------------------------------------------------------------------------
+   1  419000001  tanker      9.412    3.000    1.929    2.508   -1.761    0.000    0.736    0.000    3.000
+   2  419000005  cargo      -1.381    0.016    2.500   -1.549   -2.654    0.095    0.212    0.000    0.000
+   3  419000004  fishing    -3.815    0.927    0.000   -1.888   -2.598   -0.044   -0.212    0.000    0.000
+
+ELIMINATED, WITH THE REASON RECORDED FOR EACH
+
+  419000002  [NO_TEMPORAL_OVERLAP]
+    This vessel had no recorded position anywhere in the origin field's time window.
+  419000003  [NO_SPATIAL_SUPPORT]
+    This vessel's track and dark-period envelope never entered a region of non-negligible origin probability.
+
+F1 field integral   F2 dark overlap   F3 axis alignment   F4 speed anomaly
+F5 course anomaly   F6 vessel plausibility (downweights only, never eliminates)
+F7 AIS integrity    F8 radar confirmed dark
+
+Weights are in backend/config/scoring.yaml and are printed verbatim in the dossier.
+No classifier is trained for attribution.

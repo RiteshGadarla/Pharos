@@ -1,4 +1,4 @@
-.PHONY: setup dev venv up down run-core run-detection test test-core test-detection fetch-data fixtures seed-demo validate lint
+.PHONY: setup dev venv up down run-core run-detection test test-core test-detection fetch-data fixtures seed-demo validate deck lint
 
 # Installs everything needed to run the demo, skipping anything already
 # in place: backend venv, the segmentation model, the fixture data, the
@@ -54,6 +54,11 @@ seed-demo:
 
 validate:
 	$(MAKE) -C backend validate
+
+# The four P-1 deck figures, from the precomputed demo bundle.
+# Throwaway scripts, see deck/README.md.
+deck:
+	backend/.venv/bin/python deck/scripts/make_figures.py
 
 lint:
 	$(MAKE) -C backend lint

@@ -68,7 +68,7 @@ run-detection:
 test: ensure-fixtures test-core test-detection
 
 test-core:
-	.venv/bin/pytest -q tests services/core
+	.venv/bin/pytest -q tests services/core validation
 
 test-detection:
 	.venv/bin/pytest -q services/detection
@@ -88,4 +88,4 @@ validate: ensure-fixtures
 	PYTHONPATH=. .venv/bin/python scripts/run_validation.py
 
 lint:
-	.venv/bin/ruff check services/core services/detection
+	.venv/bin/ruff check services/core services/detection validation

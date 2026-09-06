@@ -113,10 +113,28 @@ export function caseBounds(bundle: DemoBundle): Bounds {
   return fieldAndSceneBounds(bundle);
 }
 
+// The scene, the backward origin field and the forward forecast field:
+// the camera for the drift stage, which is the one stage that shows
+// both halves of the drift picture.
+//
+// Kept separate from caseBounds rather than folded into it. The forecast
+// can run a long way downstream of the origin envelope, and widening
+// every other view to contain it would shrink the field the attribution
+// actually rests on for the sake of a layer that stage is not showing.
+export function driftBounds(bundle: DemoBundle): Bounds {
+  const b = fieldAndSceneBounds(bundle);
+  const forecast = bundle.forecast_field;
+  if (forecast) {
+    for (const lon of forecast.lon) growToInclude(b, lon, b[1]);
+    for (const lat of forecast.lat) growToInclude(b, b[0], lat);
+  }
+  return b;
+}
+
 // Union of the scene bbox, the field's lat/lon extent and every AIS
 // point, eliminated vessels included.
 export function overallBounds(bundle: DemoBundle): Bounds {
-  const b = fieldAndSceneBounds(bundle);
+  const b = driftBounds(bundle);
   for (const vessel of bundle.vessels) {
     for (const p of vessel.points) growToInclude(b, p.lon, p.lat);
   }

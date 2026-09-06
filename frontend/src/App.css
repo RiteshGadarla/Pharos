@@ -83,6 +83,192 @@
 }
 
 /* body layout */
+/* stage rail: the three-step sequence above the map */
+.stage-rail {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--graticule);
+}
+
+.stage-steps {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.stage-step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  border: 1px solid var(--graticule);
+  border-radius: 3px;
+  padding: 5px 11px 5px 7px;
+  color: var(--muted);
+  font-family: var(--font-heading);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.stage-step:hover {
+  color: var(--paper);
+  border-color: var(--muted);
+}
+
+.stage-step-ordinal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+/* A completed stage stays legible rather than fading out: the room can
+   still be sent back to it, and a greyed-out step reads as disabled. */
+.stage-step.done {
+  color: var(--cleared);
+  border-color: var(--cleared);
+}
+
+.stage-step.current {
+  color: var(--ink);
+  background: var(--oil);
+  border-color: var(--oil);
+}
+
+.stage-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stage-question {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--paper);
+}
+
+.stage-answer {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.stage-nav {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.stage-nav-button {
+  background: transparent;
+  border: 1px solid var(--graticule);
+  border-radius: 3px;
+  padding: 7px 12px;
+  color: var(--paper);
+  font-family: var(--font-heading);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.stage-nav-button:hover:not(:disabled) {
+  border-color: var(--oil);
+  color: var(--oil);
+}
+
+.stage-nav-button.primary {
+  border-color: var(--oil);
+  color: var(--oil);
+}
+
+.stage-nav-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* stage side panels */
+.stage-panel {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--graticule);
+}
+
+.stage-panel .evidence-facts dd.wrap {
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* The two drift blocks are deliberately symmetrical, so the only thing
+   separating them is the swatch, the label and which one is live. */
+.drift-block-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.drift-block-head .evidence-heading {
+  margin: 0;
+}
+
+.drift-block.live {
+  background: rgba(233, 227, 210, 0.03);
+}
+
+.drift-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.drift-swatch.backward {
+  background: var(--oil);
+}
+
+.drift-swatch.forward {
+  background: var(--forecast);
+}
+
+.drift-swatch.window {
+  background: repeating-linear-gradient(135deg, var(--oil) 0 2px, transparent 2px 5px);
+  border: 1px solid var(--oil);
+}
+
+.drift-live-chip {
+  margin-left: auto;
+  font-family: var(--font-heading);
+  font-size: 9px;
+  letter-spacing: 0.09em;
+  color: var(--ink);
+  background: var(--paper);
+  border-radius: 2px;
+  padding: 2px 5px;
+}
+
+.evidence-reason.warn {
+  color: var(--oil);
+}
+
 .app-body {
   flex: 1;
   display: flex;
@@ -167,6 +353,18 @@
 .swatch-dashed {
   background: repeating-linear-gradient(90deg, var(--suspect) 0 3px, transparent 3px 5px);
 }
+.swatch-radar {
+  background: var(--radar);
+  border-radius: 50%;
+}
+.swatch-radar-hollow {
+  background: transparent;
+  border: 2px solid var(--radar);
+  border-radius: 50%;
+}
+.swatch-forecast {
+  background: var(--forecast);
+}
 
 .provenance {
   font-family: var(--font-mono);
@@ -248,6 +446,38 @@
   font-size: 9px;
   letter-spacing: 0.1em;
   color: var(--suspect);
+}
+
+/* The verdict class, stated first. The three classes are not degrees of
+   one answer, so they do not share a colour: DARK_CONFIRMED in
+   particular is a finding, not a weaker ATTRIBUTED. */
+.verdict-chip {
+  display: inline-block;
+  font-family: var(--font-heading);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  padding: 3px 8px;
+  margin-bottom: 8px;
+  border: 1px solid currentColor;
+}
+.verdict-attributed {
+  color: var(--suspect);
+}
+.verdict-ranked {
+  color: var(--oil);
+}
+.verdict-dark_confirmed {
+  color: var(--radar);
+}
+
+.radar-support {
+  color: var(--radar);
+}
+
+.infrastructure-flag {
+  border-left: 2px solid var(--oil);
+  padding-left: 8px;
+  margin-top: 8px;
 }
 
 .verdict-headline {
@@ -334,6 +564,67 @@
   padding: 16px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.suspect-radar {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--radar);
+}
+
+/* F7's individual flags, listed rather than summarised. The factor bar
+   gives the aggregate; an operator deciding whether to act on it needs
+   to see which inconsistencies actually fired. */
+.suspect-flags {
+  margin: 8px 0 0;
+  padding-left: 14px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ledgers: deliberately plain. These are records, not visualisations. */
+.ledger-tables {
+  padding: 12px 14px 20px;
+}
+
+.ledger-heading {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--paper);
+  margin: 14px 0 4px;
+}
+
+.ledger-note {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.ledger-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.ledger-table th {
+  text-align: left;
+  font-family: var(--font-heading);
+  font-weight: 400;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--graticule);
+  padding: 4px 6px 4px 0;
+}
+
+.ledger-table td {
+  padding: 4px 6px 4px 0;
+  border-bottom: 1px solid rgba(46, 85, 103, 0.4);
+  color: var(--paper);
 }
 
 /* suspects panel */
@@ -515,6 +806,24 @@
   border: 1px solid var(--muted);
 }
 
+/* Optical corroboration. no_coverage is deliberately not styled as a
+   warning: it is the common case and it weakens nothing, because SAR is
+   the primary sensor precisely for being all weather and day or night. */
+.optical-agree {
+  color: var(--cleared);
+  border: 1px solid var(--cleared);
+}
+
+.optical-disagree {
+  color: var(--oil);
+  border: 1px solid var(--oil);
+}
+
+.optical-no_coverage {
+  color: var(--muted);
+  border: 1px solid var(--muted);
+}
+
 .evidence-reason {
   margin: 4px 0 0;
   font-size: 11px;
@@ -629,9 +938,88 @@
   background: var(--graticule);
 }
 
+/* Ticks are coloured by which field owns that instant, so the axis
+   itself shows where the reconstruction ends and the prediction
+   begins, without needing to be read. */
+.scrubber-ticks .tick.forward {
+  background: color-mix(in srgb, var(--forecast) 55%, transparent);
+}
+
 .scrubber-ticks .tick.active {
   background: var(--oil);
   height: 6px;
+}
+
+.scrubber-ticks .tick.forward.active {
+  background: var(--forecast);
+}
+
+/* The hours the slick's own condition says the discharge plausibly
+   happened in. Shaded rather than outlined: the weighting tapers at the
+   edges, so a hard border would read as a boundary the evidence does
+   not support. Sits behind the ticks and takes no pointer events, so it
+   annotates the axis without getting in the way of dragging it. */
+.scrubber-window {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  background: color-mix(in srgb, var(--oil) 14%, transparent);
+  border-left: 1px dashed color-mix(in srgb, var(--oil) 55%, transparent);
+  border-right: 1px dashed color-mix(in srgb, var(--oil) 55%, transparent);
+  pointer-events: none;
+}
+
+.scrubber-window-label {
+  position: absolute;
+  bottom: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-heading);
+  font-size: 8px;
+  letter-spacing: 0.09em;
+  color: color-mix(in srgb, var(--oil) 80%, transparent);
+  white-space: nowrap;
+}
+
+/* The acquisition instant: the one point on this axis that was
+   observed rather than reconstructed or predicted. */
+.scrubber-pivot {
+  position: absolute;
+  top: -3px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--paper);
+  pointer-events: none;
+}
+
+.scrubber-pivot-label {
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-heading);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: var(--paper);
+  white-space: nowrap;
+}
+
+.scrubber-direction {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  padding: 4px 8px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+.scrubber-direction.backward {
+  color: var(--oil);
+}
+
+.scrubber-direction.forward {
+  color: var(--forecast);
 }
 
 .scrubber-bound {
@@ -684,3 +1072,814 @@
   font-size: 13px;
   color: var(--oil);
 }
+
+
+/* ---- map legend: what each mark on the chart MEANS ---------------- */
+/* Bottom left, opposite the layer toggles. Toggles are a control, this
+   is a reference, and mixing them made the control panel long enough
+   that nobody read either. */
+.map-legend {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  width: 320px;
+  max-height: min(62%, 560px);
+  display: flex;
+  flex-direction: column;
+  background: rgba(16, 44, 58, 0.94);
+  border: 1px solid var(--graticule);
+  border-radius: 4px;
+  z-index: 5;
+  overflow: hidden;
+}
+
+.map-legend-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--graticule);
+  padding: 8px 11px;
+  color: var(--paper);
+  font-family: var(--font-heading);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.map-legend.collapsed .map-legend-toggle {
+  border-bottom: none;
+}
+
+.map-legend-chevron {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.map-legend-rows {
+  overflow-y: auto;
+  padding: 8px 11px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.map-legend-row {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+}
+
+.map-legend-sample {
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.map-legend-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.map-legend-label {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--paper);
+}
+
+.map-legend-meaning {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+/* ---- forcing readout: the numbers behind the drift ---------------- */
+.forcing-readout {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 232px;
+  background: rgba(16, 44, 58, 0.94);
+  border: 1px solid var(--graticule);
+  border-radius: 4px;
+  padding: 9px 11px 8px;
+  z-index: 5;
+}
+
+.forcing-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.forcing-title {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--paper);
+}
+
+.forcing-note {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.forcing-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 10px;
+}
+
+.forcing-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.forcing-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-heading);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.forcing-swatch {
+  width: 8px;
+  height: 2px;
+  flex-shrink: 0;
+}
+.forcing-swatch.current {
+  background: var(--current);
+}
+.forcing-swatch.wind {
+  background: var(--wind);
+}
+
+.forcing-value {
+  font-size: 13px;
+  color: var(--paper);
+}
+
+.forcing-bearing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  color: var(--muted);
+}
+
+/* Rotated to match the map's own arrows, so the readout and the chart
+   cannot disagree about which way the water is going. */
+.forcing-arrow {
+  display: inline-block;
+  line-height: 1;
+  font-size: 11px;
+}
+
+.forcing-provenance {
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid var(--graticule);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+/* ---- vessel focus card ------------------------------------------- */
+.focus-card {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--graticule);
+  border-left: 3px solid var(--muted);
+}
+.focus-card.role-culprit {
+  border-left-color: var(--suspect);
+}
+.focus-card.role-eliminated {
+  border-left-color: var(--cleared);
+}
+
+.focus-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.focus-mmsi {
+  font-size: 19px;
+  color: var(--paper);
+  letter-spacing: 0.02em;
+}
+
+.focus-type {
+  margin-left: 8px;
+  font-family: var(--font-heading);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.focus-clear {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--graticule);
+  border-radius: 3px;
+  padding: 4px 9px;
+  color: var(--muted);
+  font-family: var(--font-heading);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.focus-clear:hover {
+  color: var(--paper);
+  border-color: var(--muted);
+}
+
+.focus-status {
+  margin: 6px 0 8px;
+  font-family: var(--font-heading);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.focus-status.status-culprit {
+  color: var(--suspect);
+}
+.focus-status.status-survivor {
+  color: var(--muted);
+}
+.focus-status.status-eliminated {
+  color: var(--cleared);
+}
+
+.focus-reason {
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--paper);
+}
+
+.focus-rule {
+  display: block;
+  margin-top: 4px;
+  font-size: 9.5px;
+  color: var(--muted);
+}
+
+.focus-sub {
+  margin: 12px 0 6px;
+  font-family: var(--font-heading);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.focus-gap {
+  border-left: 2px solid var(--suspect);
+  padding-left: 9px;
+  margin-bottom: 9px;
+}
+.focus-gap.live {
+  background: rgba(214, 69, 94, 0.09);
+}
+
+.focus-gap-line {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 11px;
+  color: var(--paper);
+}
+
+.focus-gap-dur {
+  color: var(--suspect);
+}
+
+.focus-gap-now {
+  margin-left: auto;
+  font-family: var(--font-heading);
+  font-size: 8.5px;
+  letter-spacing: 0.09em;
+  color: var(--ink);
+  background: var(--suspect);
+  border-radius: 2px;
+  padding: 2px 5px;
+}
+
+.focus-gap-note {
+  margin: 4px 0 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.focus-factor {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0;
+  font-size: 11px;
+}
+
+.focus-factor-label {
+  color: var(--muted);
+}
+
+.focus-factor-value {
+  color: var(--paper);
+}
+.focus-factor-value.negative {
+  color: var(--cleared);
+}
+
+.focus-narrative {
+  margin: 9px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--paper);
+}
+
+
+/* ---- how the case was built -------------------------------------- */
+.case-build {
+  padding: 12px 14px 14px;
+}
+
+.case-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.case-counter {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* The step rail. Every step is clickable: during questions a room asks
+   about one specific piece of evidence, not about the sequence. */
+.case-track {
+  list-style: none;
+  margin: 10px 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-left: 1px solid var(--graticule);
+}
+
+.case-tick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 4px 6px 4px 10px;
+  margin-left: -1px;
+  border-left: 2px solid transparent;
+  color: var(--muted);
+  font-family: var(--font-heading);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.case-tick:hover {
+  color: var(--paper);
+}
+
+.case-tick.done {
+  color: var(--cleared);
+}
+
+.case-tick.current {
+  color: var(--paper);
+  border-left-color: var(--oil);
+  background: rgba(242, 160, 61, 0.07);
+}
+
+.case-tick-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.case-tick-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* A step where the leader changed is the interesting one, and it is the
+   step a presenter will be asked about. Marking it means nobody has to
+   remember which it was. */
+.case-tick-flip {
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  background: var(--suspect);
+  border-radius: 2px;
+  padding: 2px 5px;
+  flex-shrink: 0;
+}
+
+.case-question {
+  margin: 0 0 5px;
+  font-family: var(--font-heading);
+  font-size: 13px;
+  color: var(--paper);
+}
+
+.case-note {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.case-factors {
+  margin: 0 0 10px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.case-factor-chip {
+  display: inline-block;
+  font-size: 9.5px;
+  border: 1px solid var(--graticule);
+  border-radius: 2px;
+  padding: 1px 5px;
+  margin: 0 4px 3px 0;
+  color: var(--paper);
+}
+
+.case-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.case-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 3px 2px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.case-bar-row:hover {
+  background: rgba(233, 227, 210, 0.05);
+}
+
+.case-bar-rank {
+  font-size: 10px;
+  color: var(--muted);
+  width: 20px;
+  flex-shrink: 0;
+}
+
+.case-bar-mmsi {
+  font-size: 11px;
+  color: var(--muted);
+  width: 74px;
+  flex-shrink: 0;
+}
+
+.case-bar-row.final-lead .case-bar-mmsi {
+  color: var(--paper);
+}
+
+.case-bar-track {
+  position: relative;
+  flex: 1;
+  height: 11px;
+  background: rgba(46, 85, 103, 0.35);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+/* Bars run from a centre line: a factor can count against a vessel, and
+   a chart that only grows rightwards hides half the model. */
+.case-bar-zero {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--graticule);
+}
+
+.case-bar-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--oil);
+  transition: width 260ms ease-out, left 260ms ease-out;
+}
+
+.case-bar-fill.negative {
+  background: var(--cleared);
+}
+
+.case-bar-total {
+  font-size: 11px;
+  color: var(--paper);
+  width: 44px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.case-nav {
+  display: flex;
+  gap: 6px;
+  margin: 11px 0;
+}
+
+.case-nav button {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--graticule);
+  border-radius: 3px;
+  padding: 6px 8px;
+  color: var(--paper);
+  font-family: var(--font-heading);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.case-nav button:hover:not(:disabled) {
+  border-color: var(--oil);
+  color: var(--oil);
+}
+
+.case-nav button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* The two claims worth holding the system to. Both are computed, and
+   the leave-one-out result can come out against us. */
+.case-robustness {
+  border-top: 1px solid var(--graticule);
+  padding-top: 10px;
+  border-left: 3px solid var(--cleared);
+  padding-left: 10px;
+}
+
+.case-robustness.fragile {
+  border-left-color: var(--oil);
+}
+
+.case-robust-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  padding: 1px 0;
+}
+
+.case-robust-label {
+  font-family: var(--font-heading);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  width: 92px;
+  flex-shrink: 0;
+}
+
+.case-robust-value {
+  color: var(--paper);
+}
+
+.case-statement {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--paper);
+}
+
+
+/* ---- what a simpler system would have said ------------------------ */
+.case-baselines {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--graticule);
+}
+
+.case-sub {
+  margin: 0 0 5px;
+  font-family: var(--font-heading);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.baseline-row {
+  border-left: 2px solid var(--cleared);
+  padding: 7px 0 7px 9px;
+  margin-bottom: 8px;
+}
+
+/* A baseline reaching a different answer is the interesting case and is
+   marked as such, but neither state is styled as good or bad: the
+   comparison has to be able to come out either way to be worth making. */
+.baseline-row.differs {
+  border-left-color: var(--oil);
+}
+
+.baseline-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.baseline-label {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  color: var(--paper);
+}
+
+.baseline-verdict {
+  flex-shrink: 0;
+  font-family: var(--font-heading);
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 2px;
+  padding: 2px 5px;
+}
+
+.baseline-verdict.agrees {
+  color: var(--cleared);
+  border: 1px solid var(--cleared);
+}
+
+.baseline-verdict.differs {
+  color: var(--ink);
+  background: var(--oil);
+}
+
+.baseline-detail {
+  margin: 4px 0 0;
+  font-size: 10.5px;
+  color: var(--paper);
+}
+
+.baseline-caveat {
+  margin: 4px 0 0;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--oil);
+}
+
+.baseline-assumes {
+  margin: 4px 0 0;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* Estimated age, Stage 1. The range is the headline number and reads
+   as one: it is the first thing the case asserts about time, and every
+   later timing claim is measured against it. */
+.age-estimate {
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.age-pill {
+  font-family: var(--font-heading);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  border-radius: 3px;
+  padding: 2px 7px;
+  margin-left: auto;
+  border: 1px solid currentColor;
+}
+
+.age-fresh { color: var(--oil); }
+.age-intermediate { color: var(--muted); }
+.age-weathered { color: var(--cleared); }
+
+/* F9's working, on the vessel card. Colour carries the three states
+   because the distinction that matters is categorical: only "outside"
+   was penalised at all, and a viewer should be able to see that
+   without reading the sentence. */
+.focus-timing {
+  border-top: 1px solid var(--rule);
+  padding-top: 10px;
+  margin-top: 10px;
+  border-left: 2px solid transparent;
+  padding-left: 8px;
+}
+
+.focus-timing.timing-inside { border-left-color: var(--cleared); }
+.focus-timing.timing-margin { border-left-color: var(--muted); }
+.focus-timing.timing-outside { border-left-color: var(--oil); }
+
+.focus-timing-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.focus-timing-lag {
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.timing-pill {
+  font-family: var(--font-heading);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  border-radius: 3px;
+  padding: 2px 7px;
+  border: 1px solid currentColor;
+}
+
+.timing-pill.timing-inside { color: var(--cleared); }
+.timing-pill.timing-margin { color: var(--muted); }
+.timing-pill.timing-outside { color: var(--oil); }
+
+.focus-timing-window {
+  font-size: 10px;
+  margin: 0 0 4px;
+}
+
+/* The focused vessel's best opportunity, against the origin-window
+   band. This is F9 made visible: the band is the claim about when the
+   discharge happened, the caret is when this vessel was actually over
+   the origin, and the distance between them is the whole factor. */
+.scrubber-opportunity {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.scrubber-opportunity-caret {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: currentColor;
+}
+
+.scrubber-opportunity-caret::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: -3px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+}
+
+.scrubber-opportunity-label {
+  position: absolute;
+  top: -16px;
+  left: 5px;
+  font-size: 9px;
+  color: currentColor;
+  white-space: nowrap;
+}
+
+.scrubber-opportunity.timing-inside { color: var(--cleared); }
+.scrubber-opportunity.timing-margin { color: var(--muted); }
+.scrubber-opportunity.timing-outside { color: var(--oil); }

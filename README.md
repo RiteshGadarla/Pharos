@@ -1,103 +1,213 @@
-# SLICKTRACE
+# DRISHTA
 
-Oil spill attribution pipeline built for Smart India Hackathon, NTRO Problem Statement 26143.
+A maritime event attribution engine. Built for Smart India Hackathon 2026, NTRO Problem Statement 26143.
 
-An oil slick on satellite imagery is not where it started. SLICKTRACE detects a slick on Sentinel-1 SAR, rejects look-alikes using wind physics, runs an ensemble backward drift to produce an origin probability field over latitude, longitude and time, reconstructs AIS vessel traffic through that field, detects vessels whose AIS went dark over the origin window, scores every vessel with an explicit weighted evidence model, logs a reason for every vessel it eliminates, and exports a hashed evidence dossier.
+An oil slick on satellite imagery is a crime scene with no timestamp and no suspect, and it is not where it started. DRISHTA detects a slick on Sentinel-1 SAR, rejects look-alikes using wind physics, runs an ensemble backward drift to produce an origin probability field over latitude, longitude and time, reconstructs AIS vessel traffic through that field, detects vessels whose AIS went dark over the origin window, confirms those dark vessels against unmatched ship targets in the same SAR scene, scores every vessel with an explicit weighted evidence model, logs a reason for every vessel it eliminates, evaluates the reconstructed discharge against MARPOL Annex I conditions, and exports a hash sealed evidence dossier carrying a Bharatiya Sakshya Adhiniyam Section 63 certificate.
 
 The system does not report where a spill started. It reports the probability of every place and time it could have started, then asks which vessel's behaviour is best explained by that distribution.
 
-See [PLAN.md](PLAN.md) for the full build plan, data contracts, non-negotiables and phase order. That file is the source of truth for design decisions.
+Underneath that sits an architectural claim: **the drift kernel is a plug in**. An oil spill is instance one of a general problem shape, which is "given an observed effect at a known place and time, reconstruct the origin window and rank who was present in it, including vessels that were not broadcasting."
 
-## Status
+See [PLAN.md](PLAN.md) for the full build plan, data contracts, non-negotiables and phase order. That file is the source of truth for design decisions. Its section 0B lists what changed from the earlier SLICKTRACE plan and why.
 
-Build in progress, phase by phase, per the acceptance tests in PLAN.md section 14.
+## What is actually built
 
-- [x] P0: repo scaffold, Docker Compose, Makefile targets
-- [x] P1: data contracts in `backend/services/core/schemas.py`, contract tests
-- [x] P2: detection service (render, tile, infer, stitch, polygonize)
-- [ ] P3: evaluation, honest per-class IoU (deferred, blocked on the labeled dataset, see PLAN.md section 4A item 4)
-- [x] P4: wind physics gate, synthetic FP-reduction measurement
-- [x] P5: characterisation, SlickFeatures geometry and relative age band
-- [x] P6: backward drift ensemble (real OpenDrift/OpenOil) and origin probability field
-- [x] P7: AIS reconstruction, synthetic generator, track interpolation, dark gaps
-- [x] P8: scoring engine and elimination log
-- [x] `backend/scripts/seed_demo.py`: runs the full pipeline once, offline, on the committed fixtures (detection through scoring) and writes `backend/data/precomputed/demo_bundle.json`. `services/core/app.py` serves it at `GET /api/demo`. Not the full PLAN.md section 15 precompute bundle (no real Sentinel-1 scenes, no `hero_sequence.json` for the rewind sequence), but a real end-to-end run, not fabricated data.
-- [~] P9: frontend shell, map, layers, time scrubber. Built as a functional MVP, not the full section 12/12A spec: MapLibre + deck.gl map (chart-paper style, no external tiles, works offline), a single time scrubber that drives the origin probability field and every AIS track together, detections with wind-gate verdicts, dark-gap envelopes, a suspects panel with animated factor bars and narrative, and a plain elimination log table. Suspect ranking itself is the static, already-scored result (not recomputed per scrub tick), so the P9 acceptance test ("scrubbing updates field, tracks and ranking together") is only partly met. Demo-facing additions on top of that MVP:
-  - **SAR basemap.** `backend/services/core/preview.py` warps the scene's VV band to EPSG:4326 and stretches it for display, and the map draws it under everything as a deck.gl `BitmapLayer`, so detection polygons sit on the image they came from instead of over blank water. It is a display product on a sea-anchored dB stretch, not the calibrated data the model saw; the stretch it used is on screen in the provenance chip and in `scene.preview.note`. Served at `GET /api/scene_preview.png`, with a static copy for the offline path.
-  - **Three view presets** (Scene, Origin, Traffic), named for the views in PLAN.md section 12. The case spans two orders of magnitude (a 5 km slick, a 100 km reachable envelope, an eliminated vessel 250 km out), so no single camera shows it all. Origin is the default.
-  - **Origin field as a filtered raster** rather than one polygon per grid cell, so a probability density stops reading as a mosaic of 1 km squares. The texture's texels are the field's own cells and its bounds are the field's own footprint, so the geometry is unchanged; only the display interpolation between cell centres is new.
-  - **Verdict card and scene evidence panel.** The rank-1 vessel, its dark period, its margin over rank 2, and the wind-gate verdict, age band and slick geometry, all with their stated reasoning. These answer the two questions a room asks first ("how do you know that is oil and not a look-alike", "how old is it") without having to open the dossier.
-  - **Scrubber** opens at the acquisition time and plays *backwards* from it, which is the signature interaction in PLAN.md section 12. It reads its position relative to acquisition ("48h 14m before acquisition"), not just an absolute UTC stamp, and ticks once per forcing timestep so it shows the resolution of the field it drives.
-  - **Origin spread readout**, in kilometres, beside the scrubber. The field's colour ramp is normalised per timestep rather than across the whole volume, because the same probability mass covers steadily more ground as the hindcast runs back and its peak density falls by over an order of magnitude; normalised globally the early field renders as almost nothing, which reads as "there is nothing here" rather than "little is known here". Per-timestep normalisation keeps the shape readable but hides that density drop, so the spread is stated as a number instead of left to be inferred from how faint a blob looks on a projector.
+Phases are from PLAN.md section 19.
 
-### The origin field has to visibly bloom, and it did not
+- [x] **P0** repo scaffold, Docker Compose, Makefile targets
+- [x] **P1** data contracts in `backend/services/core/schemas.py`, contract tests for all four rules in PLAN.md section 4
+- [x] **P2** detection service: sensor adapter, render, tile, infer, stitch, polygonize
+- [ ] **P3** evaluation, honest per class IoU. Deferred, blocked on the labeled datasets (PLAN.md section 4A). `services/detection/eval.py` raises rather than reporting a substitute number, and the dossier states plainly that the number is not available
+- [ ] **P3a** Cerulean agreement harness. The client and the agreement metric are written (`backend/validation/cerulean_client.py`, `cerulean_agreement.py`) and cache offline; no scenes have been pulled yet
+- [x] **P4** wind physics gate, synthetic FP reduction measurement
+- [x] **P4a** optical corroboration, three states emitted correctly including `no_coverage`
+- [x] **P5** characterisation, `SlickFeatures` geometry and relative age band
+- [x] **P6** drift kernel protocol, backward ensemble, origin probability field. OpenOil, Leeway and null kernels; the null kernel runs the whole pipeline end to end with no forcing data at all
+- [ ] **P6a** drifter validation. `backend/validation/drifter.py` is written; no Global Drifter Program trajectories have been pulled yet
+- [x] **P7** AIS ingest, synthetic generator, track reconstruction, dark gaps, integrity flags (F7)
+- [x] **P7a** SAR ship target extraction and radar cross check (F8)
+- [x] **P8** scoring engine, elimination log, three verdict classes
+- [x] **P8a** MARPOL Annex I layer and offshore infrastructure flag
+- [~] **P9** frontend shell, map, layers, time scrubber. A functional MVP, not the full section 16 and 16A spec, see below
+- [ ] **P9a** ambient flow shader, **P9b** rewind sequence: not started
+- [x] **P10** dossier PDF with provenance and the BSA s.63 certificate page
+- [x] **P11** validation harness, 50 incidents and three ablations
+- [ ] **P11a** Cerulean Dark case attempt: not started, blocked on P3a
+- [x] **P12** dark period ledger and AIS completeness table, exposed read only
+- [ ] **P13** space time prism, **P14** second drift kernel scenario, **P15** forward forecast view: not started
+- [~] **P16** demo hardening: offline mode and the precompute bundle work; no MP4 fallback recorded yet
+- [x] **P-1** deck assets, in `deck/`. Built after the pipeline rather than before it, see `deck/README.md` for what that changes
 
-The interaction the product is built around is scrubbing back from acquisition and watching the origin probability field expand as the hindcast runs out of knowledge. Measured, it was not doing that: the field's spread went 3.07 km at acquisition to 3.27 km six hours back, a 7% change over the whole window. The cloud drifted; it never grew. Four separate causes, all real, none of them cosmetic:
+## What is real and what is synthetic
 
-1. **`seed_demo.py` overrode the configured hindcast down to 8 members over a 6 hour horizon** for speed. Over 6 hours the ensemble barely diverges. The demo precompute now runs `config/pipeline.yaml` as written, 30 members over 48 hours, which the committed forcing fixtures already cover (they span 66 hours). It costs about 2 minutes for a step that runs once.
-2. **The ensemble held surface current error fixed across every member** while sampling wind drift, diffusivity and seed time. That asserted the current was known exactly, which for a surface slick is the wrong thing to be certain about. It is now sampled per member over 0.05 to 0.15 m/s, the range CMEMS surface currents validate against drifters at. Horizontal diffusivity was left at 1 to 10 m²/s, which is what Okubo's diffusion diagram gives at the 1 to 10 km scale a slick drifts over: it was *not* inflated to make the cloud bigger.
-3. **The smoothing kernel was wider than the thing it was smoothing.** A 0.02 degree bandwidth is about 2.2 km, against a true particle spread near acquisition of roughly 0.2 km, so the kernel was manufacturing an order of magnitude more uncertainty than the ensemble produced and pinning the field to a floor it could never go below. Now 0.008 degrees.
-4. **The synthetic AIS scenario scaled its geometry off the field's grid span but fixed its leg duration at one hour**, so a wider field silently accelerated every vessel. At a 48 hour horizon they exceeded 35 knots. Leg duration is now derived from the geometry at a plausible 11 knot transit speed, and the "spatially close" hard negative is placed relative to the field's actual spread rather than its grid extent, so it stays inside the probability mass instead of being eliminated for having none.
+This matters more than the feature list, so it is stated plainly rather than buried.
 
-Together: the particle spread now runs 0.2 km at acquisition to 5.5 km two days back, and the rendered field 1.2 km to 5.4 km, a 4.4x bloom that is monotonic across the window.
+**Real:** the detection model (`sahilvishwa2108/oil-spill-deeplab`, loaded from local disk), the drift physics (OpenDrift OpenOil), the ensemble construction, the field binning and normalisation, the wind gate thresholds and their physical justification, every scoring factor, every elimination rule, the verdict logic, the MARPOL condition checks, the hashing and the certificate. The slick texture in the fixture scene is real Sentinel-1A oil spill backscatter and speckle, composited from a CC BY 4.0 dataset (Persian Gulf, not the Arabian Sea). See `backend/data/fixtures/real_oil_texture/ATTRIBUTION.md`.
 
-### Two scoring bugs the longer horizon exposed
+**Synthetic:** the SAR scene's geolocation, acquisition time and surrounding sea; the wind and current forcing fields; the AIS traffic; the SAR ship targets. The three static geographic layers (coastline, MARPOL special areas, offshore installations) are generalised placeholders, and each file says so at the top of itself.
 
-Both were latent, and both were only visible once the field's time window got much longer than a vessel track:
+**Why the AIS is synthetic, and why that is allowed.** The problem statement says, verbatim: *"Real AIS if available may be used else synthetic data can be prepared for the region of oil spill to demonstrate the functioning of the algorithm."* That sentence is recorded at the top of `backend/config/demo.yaml`. Permission is not an excuse to be sloppy: lane geometry, vessel type mix, speed distributions, ping intervals and dropout rates are meant to be fitted from real MarineCadastre statistics, the format authority the PS itself names, with only the incident injected. That fitting has not been done yet and the current distributions are documented placeholders. The database schema mirrors the MarineCadastre columns, so a real ICG or DGLL feed drops in with no code change.
 
-- **F5 (course anomaly) sampled the vessel's course at the field window's own edges.** With a 48 hour window and a 5 hour track those edges are nowhere near the vessel, so it returned its "could not compute" sentinel of 0.0 for every vessel. It now samples the ends of the overlap between the track and the window.
-- **0.0 is not a neutral value in log-odds space.** With `LOGIT_EPS = 1e-6`, `logit(0)` is -13.8, so any factor that legitimately found nothing contributed a penalty large enough to bury every real signal the other factors found. A vessel that simply never slowed down scored `logit(0)` on F4 and picked up -13.8 on that alone, which was enough to rank the wrong vessel first on the fixture field. The clamp is now 0.05, bounding any single factor to about a 19:1 likelihood ratio, and factors that genuinely cannot be computed return 0.5, which contributes nothing.
+**Not real anywhere:** an accuracy number for the detector. The HuggingFace model card's self reported 0.9668 F1 is not reproduced in the UI, the README, the dossier or any slide, because background pixels dominate this five class taxonomy and an aggregate figure says nothing about oil class performance. `eval.py` exists to produce the honest per class number and is blocked on the labeled datasets; until it runs, the dossier says the number is unavailable rather than substituting one.
 
-The narrative templater also had a related honesty problem: it described any positive contribution in words, so a `field_integral` contribution of 0.0004 was read out as "its track passes through the highest-probability part of the origin field". It now ignores contributions below 0.05 and falls back to saying no single factor stands out.
+## The pipeline, stage by stage
 
-The 50-incident validation harness still reports 100% rank-1 accuracy on the baseline and both ablations after these changes.
-- [x] P10: dossier PDF. `backend/services/core/dossier/render.py`, built from the same bundle the frontend reads. Cover, scene footprint, detection table (states plainly that per-class IoU is not available, P3 is deferred, rather than reporting a substitute number), slick characterisation, three origin-field time snapshots, ranked suspects with factor-contribution bar charts and narrative, the full elimination log, and a provenance page (SHA-256 of every input artifact, the git commit, `config/scoring.yaml` verbatim). Served at `GET /api/dossier`; the frontend's "Download dossier" button uses it, falling back to a static copy for the fully offline path.
-- [x] P11: validation harness. `backend/services/core/validation/harness.py` and `backend/scripts/run_validation.py`. Runs 50 synthetic incidents stratified across a few independently-run backward ensembles, traffic density and dark-gap presence, and reports rank-1/rank-3 accuracy, mean rank, and a breakdown by traffic density, plus the two ablations (F2 zeroed, F1 replaced by distance to the field's centroid) to `backend/data/processed/validation.md`. Reported honestly, including a case where the aggregate ablation numbers moved the opposite of the expected direction on this run, with the underlying mechanism isolated separately (a purpose-built right-place-wrong-time decoy vessel) rather than smoothed over. States plainly that this measures internal consistency, not real-world accuracy.
-- [ ] P9a (GPU ambient flow shader), P9b (choreographed rewind sequence), P12 (3D space-time prism): not started, see PLAN.md section 14.
+```
+SAR scene
+  -> sensor adapter          services/detection/sensors.py       (S1 implemented, EOS-04 a documented stub)
+  -> render, tile, infer     services/detection/render|tiling|infer.py
+  -> polygonize (oil)        services/detection/polygonize.py    -> Detection
+  -> ship targets (hulls)    services/detection/ships.py         -> ShipTarget
+  -> wind physics gate       services/core/gate/wind.py          -> GateResult
+  -> optical corroboration   services/core/corroborate/optical.py -> OpticalCorroboration
+  -> characterisation        services/core/characterize/         -> SlickFeatures
+  -> backward drift ensemble services/core/drift/ + hindcast/    -> OriginField
+  -> AIS reconstruction      services/core/ais/tracks|darkgaps.py -> AISTrack, DarkGap
+  -> AIS integrity           services/core/ais/integrity.py      -> IntegrityFlag
+  -> radar cross check       services/core/crosscheck/radar.py   -> matched / unmatched targets
+  -> elimination             services/core/scoring/eliminate.py  -> Elimination
+  -> scoring, F1 to F8       services/core/scoring/engine.py     -> SuspectScore
+  -> verdict                 services/core/scoring/verdict.py    -> CaseVerdict
+  -> MARPOL Annex I          services/core/legal/marpol.py       -> MarpolAssessment
+  -> infrastructure flag     services/core/crosscheck/infrastructure.py
+  -> ledgers                 services/core/ledger/               -> accumulating records
+  -> dossier + certificate   services/core/dossier/              -> PDF
+```
 
-P2 was validated against a fixture scene (`backend/scripts/make_fixture_scene.py`, `backend/data/fixtures/synthetic_scene.tif`), not a real Sentinel-1 product, since Sentinel-1 access is blocked on the Earthdata account (PLAN.md section 4A). Swap in a real scene once that account exists; the pipeline itself does not change. The fixture's own slick is no longer hand-drawn: it composites real Sentinel-1A oil-spill backscatter and speckle texture from a CC BY 4.0 dataset (Persian Gulf, not the Arabian Sea) into the synthetic background, with the oil/sea contrast scaled up from the source patch's own value to clear the detector's confidence threshold. See `backend/data/fixtures/real_oil_texture/ATTRIBUTION.md` for the source, license and exactly what was changed.
+### The eight evidence factors
 
-The demo's own incident (`backend/config/demo.yaml`) is a deliberately illustrative scenario, not a re-investigation of a specific real, already-resolved spill: its `source_reference` grounds *why this matters* in real, documented, unattributed Eastern Arabian Sea pollution (peer-reviewed literature, journalism on tarballs from unreported discharges, and a real Indian Coast Guard smuggling interception off Mumbai), while the date, bounding box and outcome stay clearly synthetic.
+Weights and thresholds live in `backend/config/scoring.yaml`, are shown in the UI, and are printed verbatim in the dossier. No classifier is trained for attribution: there is no ground truth, and a black box cannot be defended in court.
 
-`backend/data/fixtures/*.nc` and `*.tif` are not committed (regeneratable, deterministic, no reason to carry binary diffs in git history): run `make fixtures` to build them from `backend/scripts/make_fixture_*.py`, or just `make test` / `make setup`, which both build whatever's missing first. The real oil-texture PNGs under `backend/data/fixtures/real_oil_texture/` stay committed, since those aren't scripted, they're pulled from a real dataset.
+| | Factor | What it measures |
+|---|---|---|
+| F1 | field integral | Origin probability integrated along the vessel's reconstructed track. Rewards a vessel that lingered inside a broad uncertain cloud over one that clipped a narrow peak, which distance to centroid ranking gets exactly backwards |
+| F2 | dark overlap | How much origin probability mass the vessel's dead reckoned envelope covered while it was dark |
+| F3 | axis alignment | Agreement, modulo 180 degrees, between the slick's major axis and the vessel's course |
+| F4 | speed anomaly | Sustained slowing below the vessel's own median transit speed while inside the field |
+| F5 | course anomaly | Course change across the vessel's passage through the origin window |
+| F6 | vessel plausibility | A small prior by vessel type. **Downweights only. It never eliminates**, and its weight is kept low deliberately |
+| F7 | AIS integrity | Aggregated severity of self report inconsistencies: missing IMO, implied speed beyond the plausible maximum, static data changing mid passage, MMSI reuse, position jumps. This answers "AIS can be spoofed, not just switched off" with a factor rather than a shrug |
+| F8 | radar confirmed dark | An unmatched ship target from the SAR scene itself fell inside the vessel's dark envelope and in a live cell of the origin field. **The only factor backed by a second, independent sensor**, which is why its weight is the highest in the model |
+
+### The three verdict classes
+
+| Verdict | Condition | Meaning |
+|---|---|---|
+| `ATTRIBUTED` | Rank 1 beats rank 2 by the configured dominance margin, and was broadcasting throughout the origin window | One vessel dominates. A ranked evidence package for a human investigator |
+| `RANKED` | Several plausible candidates, none dominant | An ordered list with reasons, plus the full elimination log. Narrows the field |
+| `DARK_CONFIRMED` | Every broadcasting vessel eliminated or below the plausibility floor, **and** at least one unmatched ship target sits inside the origin field | A vessel absent from the AIS picture was present in the origin envelope. Radar saw a hull; AIS did not report it |
+
+`DARK_CONFIRMED` is not a failure state. Every competing system files "no broadcasting suspect found" as no result. For an intelligence organisation, it is the finding.
+
+### The radar cross check, and its limits
+
+The cross check is the highest value addition in this revision, because it converts a dark vessel from an inference about missing data into an independent sensor observation. Its limits travel with it, in the docs, in the dossier and in the code:
+
+- Sentinel-1 ship detection at GRD resolution misses small vessels.
+- Not every unmatched target is evasion. Vessels below AIS carriage requirements, fishing craft and buoys all appear. The system reports the count, the size and the position of unmatched targets, and never asserts that unmatched equals guilty.
+- The match is made at the acquisition instant only. That cuts both ways, and the code takes it seriously: an unmatched target is only attributed to a vessel that was dark at that same instant, never to one whose gap had already closed. Without that rule the check degenerates, because a dead reckoned envelope widens at the vessel's plausible maximum speed and after an hour it is larger than the whole origin field.
+
+### What the MARPOL layer does and does not say
+
+`services/core/legal/marpol.py` evaluates the Annex I conditions that are checkable from a reconstructed track: proceeding en route, distance from nearest land, whether the track entered a special area, and an estimated instantaneous discharge rate. The rate is always a band, never a single figure, and the schema enforces that: SAR sees that a damping film is present, never how thick it is.
+
+This layer never outputs a determination of illegality. It reports which conditions the reconstructed behaviour appears not to satisfy, with its assumptions printed verbatim in the dossier. Oil content in parts per million is not observable from satellite, so no assessment can ever conclude that a discharge was permitted on that basis, and the code does not attempt it.
+
+### What the certificate claims
+
+The dossier's final page is a Bharatiya Sakshya Adhiniyam, 2023 Section 63 Schedule Part A certificate, pre filled from information the pipeline already carries, including the SHA-256 of every input artifact with the hash function named. Part B is left blank, because the statute requires it to be completed and signed by a person, and that is a human act rather than a software output.
+
+The claim is that the document is formatted to carry the information the certificate requires. The claim is **not** that the document is admissible. Admissibility is decided by a court on the facts.
+
+### Validation, three independent tracks
+
+They answer different questions and all three are needed.
+
+1. **Internal consistency** (`backend/validation/harness.py`, run with `make validate`). 50 synthetic incidents with a known injected culprit, stratified across field variant, traffic density and dark gap presence, plus three ablations: F2 zeroed, F1 replaced by distance to the field's centroid, and F8 zeroed. Written to `backend/data/processed/validation.md`. This measures internal consistency of the scoring model, not real world accuracy, and the report says so in its own text.
+2. **External agreement on detection** (`backend/validation/cerulean_agreement.py`). IoU against Cerulean's reviewed slick polygons, reported as agreement with an independent production system and never as accuracy. Written; no scenes pulled yet.
+3. **Physical validation of the drift engine** (`backend/validation/drifter.py`). Backward ensembles run from real NOAA Global Drifter Program positions, reporting containment rate and the quantile at which the true prior position landed. This is the only component where real ground truth exists. A drifter is not oil, so it validates the advection and diffusion core, not the oil model on top. Written; no trajectories pulled yet.
+
+**Cerulean is never in the runtime path.** It lives only under `backend/validation/`, and `backend/tests/test_no_cerulean_in_services.py` enforces that by scanning the source tree.
+
+## The frontend
+
+`frontend/` is an operator console: MapLibre plus deck.gl, chart paper styling, no external tiles, works offline. What is built:
+
+- A single time scrubber that drives the origin probability field and every AIS track together. It opens at the acquisition time and plays backwards from it, and reads its position relative to acquisition rather than as a bare UTC stamp.
+- The SAR scene as a basemap, so detection polygons sit on the image they came from. It is a display product on a sea anchored dB stretch, not the calibrated data the model saw, and the stretch it used is on screen in the provenance chip.
+- Detection polygons with their wind gate verdicts, suppressed detections greyed with the reason on hover.
+- AIS tracks with dark gaps drawn dashed and their dead reckoned envelopes as translucent polygons.
+- **Radar ship targets**: unmatched targets filled in `--radar`, matched targets hollow in the same colour. Both are drawn, because a cross check that matches nothing is a broken matcher rather than a fleet of dark vessels, and you cannot see the difference unless both are on screen.
+- A verdict chip and card, a suspects panel with animated factor bars and narratives, a plain elimination log, and a plain ledger view.
+- Three view presets (Scene, Origin, Traffic), because the case spans two orders of magnitude and no single camera shows it all.
+
+Known gap against PLAN.md section 16: suspect ranking is the static already scored result rather than recomputed per scrub tick, so the P9 acceptance test is only partly met. Sections 16A layers 1 to 3 (ambient flow shader, rewind sequence, space time prism) are not started.
+
+The origin field's colour ramp is normalised per timestep rather than across the whole volume, because the same probability mass covers steadily more ground as the hindcast runs back and its peak density falls by over an order of magnitude. Normalised globally the early field renders as almost nothing, which reads as "there is nothing here" rather than "little is known here". Per timestep normalisation keeps the shape readable but hides that density drop, so the spread is stated as a number in kilometres beside the scrubber instead of being left to be inferred from how faint a blob looks on a projector.
 
 ## Repository layout
 
-The project is split into `backend/` (the Python services, tests, scripts, config and data) and `frontend/` (the operator console UI). See PLAN.md section 3 for the full layout.
+```
+PLAN.md          the source of truth for design decisions
+deck/            P-1 deck figures and the throwaway scripts that build them
+backend/
+  config/        scoring.yaml, pipeline.yaml, demo.yaml, marpol.yaml
+  services/      core/ and detection/, one shared venv
+  validation/    a sibling of services/, never imported by it
+  tests/
+  scripts/
+frontend/        the operator console
+```
+
+`backend/validation/` being a sibling of `backend/services/` rather than a child is deliberate: it is what keeps measurement tools, Cerulean above all, out of the runtime path.
 
 ## Development
 
-Only Postgres/PostGIS/Timescale runs in Docker. `services/core` and `services/detection` share one Python environment (`backend/requirements.txt`, `backend/.venv`) and run locally.
+Only Postgres, PostGIS and TimescaleDB run in Docker. `services/core`, `services/detection` and `validation` share one Python environment (`backend/requirements.txt`, `backend/.venv`) and run locally.
 
 ```
 make venv           # build backend/.venv from backend/requirements.txt
-make up              # start Postgres/PostGIS/Timescale in Docker
-make run-core         # run services/core locally, http://localhost:8000
-make run-detection    # run services/detection locally, http://localhost:8001
-make test             # run the test suite locally
+make up             # start Postgres/PostGIS/Timescale in Docker
+make run-core       # run services/core locally, http://localhost:8000
+make run-detection  # run services/detection locally, http://localhost:8001
+make test           # run the test suite locally
+make validate       # 50 incidents plus three ablations -> data/processed/validation.md
 ```
 
-These root-level targets delegate into `backend/Makefile`. Run them directly from `backend/` if you prefer. Copy `backend/.env.example` to `backend/.env` first; `POSTGRES_HOST` points at `localhost` since the database is the only thing in Docker. `KAGGLE_API_TOKEN` there is only needed to re-pull the real oil-slick texture patch (`.venv/bin/kaggle datasets download bitsandlayers/sar-oil-spill-segmentation-dataset-sos`); the chosen patch is already committed under `backend/data/fixtures/real_oil_texture/`, so this isn't needed for normal development.
+These root level targets delegate into `backend/Makefile`. Copy `backend/.env.example` to `backend/.env` first; `POSTGRES_HOST` points at `localhost` since the database is the only thing in Docker. `KAGGLE_API_TOKEN` there is only needed to re-pull the real oil slick texture patch; the chosen patch is already committed, so it is not needed for normal development.
 
-Absolute slick age in hours cannot be estimated reliably from a single SAR acquisition. This system reports a relative age band and states its reasoning, never a number in hours.
+`backend/data/fixtures/*.nc` and `*.tif` are not committed, since they are regeneratable and deterministic. Run `make fixtures` to build them, or just `make test` or `make setup`, which both build whatever is missing first. The real oil texture PNGs stay committed, since they are pulled from a real dataset rather than scripted.
 
-Every eliminated vessel carries a non-empty reason. Vessel type and class never eliminate a vessel, they only downweight its score.
+### Running the demo
 
-### Frontend (demo UI)
-
-From the repo root:
+From the repository root:
 
 ```
-make setup   # backend venv, model download, demo bundle, frontend node_modules -- skips whatever is already there
-make dev     # runs the core service (:8000) and the frontend dev server (:5173) together, Ctrl+C stops both
+make setup   # venv, model download, demo bundle, frontend node_modules; skips whatever is already there
+make dev     # core service (:8000) and the frontend dev server (:5173) together
 ```
 
-`make setup` is idempotent: safe to re-run, only does the parts that are missing. Run `make seed-demo` directly (not `setup`) to force a fresh regenerate of the demo bundle, the SAR basemap PNG and the dossier PDF after changing a fixture or `config/scoring.yaml`; it also copies all three into `frontend/public/data/`, the static fallback the frontend uses when the core service isn't running, so the demo also works with the network cable unplugged and no backend process at all.
+`make setup` is idempotent. Run `make seed-demo` directly to force a fresh regenerate of the demo bundle, the SAR basemap and the dossier after changing a fixture or a config file; it also copies all three into `frontend/public/data/`, the static fallback the frontend uses when the core service is not running, so the demo works with the network cable unplugged and no backend process at all.
 
-### Running it on demo day
+For the case where the laptop cannot be trusted to keep two dev servers alive, `cd frontend && npm run build && npx vite preview` serves the production build with no backend at all. That is what the "DEMO MODE: OFFLINE" badge in the header refers to. Exercise this path once before the day, since it is the one with no moving parts. The one thing it cannot serve is the ledger view, which reads from the core service; that is stated on screen rather than failing silently.
 
-`make dev` is the normal path. For the case where the laptop cannot be trusted to keep two dev servers alive, `cd frontend && npm run build && npx vite preview` serves the production build with no backend at all: the bundle, the basemap and the dossier all load from `frontend/public/data/`, which is what the "DEMO MODE: OFFLINE" badge in the header refers to. This path is worth exercising once before the day, since it is the one that has no moving parts.
+Presenting order that matches how the pipeline actually runs: **Scene** (the SAR image, the detected slick, the wind gate that accepted it), **Origin** (the backward drift's probability field, scrubbing back from acquisition), then **Traffic** (every vessel, the dark period envelopes, the unmatched radar target, and the vessels eliminated far off scene). Open the elimination log when asked how a vessel was ruled out.
 
-Presenting order that matches how the pipeline actually runs: **Scene** (the SAR image, the detected slick on it, and the wind gate that accepted it), **Origin** (the backward drift's probability field, scrubbing back from acquisition), then **Traffic** (every vessel, the dark period envelopes, and the vessels eliminated far off scene). The elimination log tab is the tab to open when asked how a vessel was ruled out.
+### Building the deck figures
 
-Run `make validate` to run the 50-incident validation harness and write `backend/data/processed/validation.md` (takes under a minute; it runs a handful of real backward ensembles).
+```
+backend/.venv/bin/python deck/scripts/make_figures.py
+```
+
+Writes four figures to `deck/figures/` from the precomputed demo bundle. See `deck/README.md`.
+
+## Statements this system makes about itself
+
+These are load bearing. They are in the code, the dossier and the UI, not just here.
+
+- Absolute slick age in hours cannot be estimated reliably from a single SAR acquisition. We tested whether it is recoverable, concluded it is not, and therefore report a relative band with the reasoning that produced it, never a number in hours.
+- The hindcast output is a probability field, never a point. A centroid may be displayed for orientation but never enters the scoring math.
+- Every eliminated vessel carries a non empty reason. Vessel type and class never eliminate a vessel, they only downweight its score.
+- Dark periods raise suspicion. They never drop a vessel.
+- The output is ranked evidence for a human investigator. It is not an automated accusation.
+- Every stochastic component takes its seed from configuration. Two runs of the demo produce identical numbers.

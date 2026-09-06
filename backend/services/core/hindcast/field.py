@@ -1,5 +1,5 @@
 """Converts ensemble particle samples into a normalised origin probability
-field P(lat, lon, t). See PLAN.md section 8.
+field P(lat, lon, t). See PLAN.md section 9.3.
 
 Never collapses over time: the joint (lat, lon, t) distribution is what
 lets the AIS scoring reward a vessel for being in the right place at
@@ -19,26 +19,63 @@ from scipy import ndimage
 from services.core.schemas import OriginField
 
 
-def collect_samples(member_results: list[xr.Dataset]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _samples_from_array(samples: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """One DriftKernel member's (n_particles, n_steps, 3) output, with
+    NaN rows dropped. A NaN position is how a kernel reports a particle
+    that stranded or otherwise stopped being a sample of where the
+    slick could have been."""
+    from services.core.drift.kernel import samples_to_arrays
+
+    return samples_to_arrays(samples)
+
+
+def _samples_from_dataset(result: xr.Dataset) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """One OpenDrift result Dataset, dims (trajectory, time). Kept
+    because OpenDrift's own Dataset is the natural thing to hand-build
+    in a test, and because a kernel is free to return one."""
+    lats: list[np.ndarray] = []
+    lons: list[np.ndarray] = []
+    times: list[np.ndarray] = []
+
+    lat = result["lat"].values  # (trajectory, time)
+    lon = result["lon"].values
+    status = result["status"].values
+    time = result["time"].values  # (time,)
+
+    for ti in range(lat.shape[1]):
+        active = status[:, ti] == 0  # OpenDrift: 0 is the active/moving status
+        if not active.any():
+            continue
+        lats.append(lat[active, ti])
+        lons.append(lon[active, ti])
+        times.append(np.full(int(active.sum()), time[ti]))
+
+    if not lats:
+        return np.array([]), np.array([]), np.array([], dtype="datetime64[s]")
+    return np.concatenate(lats), np.concatenate(lons), np.concatenate(times)
+
+
+def collect_samples(member_results: list) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Flattens every active particle at every timestep, across all
-    ensemble members, into parallel (lat, lon, time) arrays."""
+    ensemble members, into parallel (lat, lon, time) arrays.
+
+    Accepts either a DriftKernel's (n_particles, n_steps, 3) sample
+    array or an OpenDrift result Dataset per member, so the field
+    builder does not care which kernel produced the ensemble."""
     lats: list[np.ndarray] = []
     lons: list[np.ndarray] = []
     times: list[np.ndarray] = []
 
     for result in member_results:
-        lat = result["lat"].values  # (trajectory, time)
-        lon = result["lon"].values
-        status = result["status"].values
-        time = result["time"].values  # (time,)
-
-        for ti in range(lat.shape[1]):
-            active = status[:, ti] == 0  # OpenDrift: 0 is the active/moving status
-            if not active.any():
-                continue
-            lats.append(lat[active, ti])
-            lons.append(lon[active, ti])
-            times.append(np.full(int(active.sum()), time[ti]))
+        if isinstance(result, np.ndarray):
+            lat, lon, time = _samples_from_array(result)
+        else:
+            lat, lon, time = _samples_from_dataset(result)
+        if len(lat) == 0:
+            continue
+        lats.append(lat)
+        lons.append(lon)
+        times.append(time.astype("datetime64[ns]"))
 
     if not lats:
         raise ValueError("no active particle samples across any ensemble member")
@@ -46,16 +83,52 @@ def collect_samples(member_results: list[xr.Dataset]) -> tuple[np.ndarray, np.nd
     return np.concatenate(lats), np.concatenate(lons), np.concatenate(times)
 
 
+def member_horizon_hours(member_results: list) -> float:
+    """The horizon the run covered, in hours: the median span of a single
+    ensemble member.
+
+    Per member, not across the whole sample set. Members are seeded with
+    jittered start times, so the span of all samples pooled together is
+    the horizon plus the jitter spread, and reporting that as the horizon
+    would inflate a 24 hour forecast to 24.1. And not the binned time
+    axis either, which holds bin centres and can run a step past the last
+    sample depending on where the kernel's steps fall.
+    """
+    spans: list[float] = []
+    for result in member_results:
+        if isinstance(result, np.ndarray):
+            _, _, times = _samples_from_array(result)
+        else:
+            _, _, times = _samples_from_dataset(result)
+        if len(times) < 2:
+            continue
+        spans.append(float((times.max() - times.min()) / np.timedelta64(1, "h")))
+    if not spans:
+        return 0.0
+    return float(np.median(spans))
+
+
 def build_origin_field(
-    member_results: list[xr.Dataset],
+    member_results: list,
     grid_resolution_deg: float,
     time_step_minutes: float,
     gaussian_bandwidth_deg: float,
     seed: int,
+    kernel: str = "openoil",
+    forcing_source: str = "unspecified",
+    direction: str = "backward",
 ) -> xr.Dataset:
     """Bins ensemble samples onto a (time, lat, lon) grid, Gaussian-smooths
     spatially within each time slice, and normalises so the field sums to
-    1 over the whole space-time volume."""
+    1 over the whole space-time volume.
+
+    The binning is direction agnostic: it is the same operation on a
+    backward ensemble and a forward one. `direction` only records which
+    was run, so nothing downstream can read a forecast as an origin.
+    Forward callers should go through forecast/forward.py rather than
+    passing direction="forward" here."""
+    if direction not in ("backward", "forward"):
+        raise ValueError(f"direction must be 'backward' or 'forward', got {direction!r}")
     lats, lons, times = collect_samples(member_results)
     n_members = len(member_results)
 
@@ -99,10 +172,24 @@ def build_origin_field(
         attrs={
             "seed": int(seed),
             "n_members": int(n_members),
+            "kernel": str(kernel),
+            "forcing_source": str(forcing_source),
+            "direction": str(direction),
+            # The horizon the run covered. Not the span of this grid's
+            # time coordinate: that holds bin centres and can run a step
+            # past the last sample, which reports a 48 hour hindcast as
+            # 49. Captions and dossier text must quote this.
+            "horizon_hours": member_horizon_hours(member_results),
             "description": (
                 "Backward drift origin probability field. Sums to 1 over "
                 "the whole space-time volume. Never collapse over time "
                 "before scoring, see PLAN.md non-negotiable 1."
+                if direction == "backward"
+                else (
+                    "Forward drift forecast field: where the slick goes "
+                    "next. Sums to 1 over the whole space-time volume. "
+                    "Never an input to attribution, see PLAN.md section 15."
+                )
             ),
         },
     )
@@ -120,4 +207,6 @@ def write_origin_field(field_ds: xr.Dataset, detection_id: str, out_path: str) -
         t_max=np.datetime_as_string(time_values.max(), unit="s"),
         n_members=int(field_ds.attrs["n_members"]),
         seed=int(field_ds.attrs["seed"]),
+        kernel=str(field_ds.attrs.get("kernel", "openoil")),
+        direction=str(field_ds.attrs.get("direction", "backward")),
     )

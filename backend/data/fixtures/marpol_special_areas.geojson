@@ -1,0 +1,40 @@
+{
+  "type": "FeatureCollection",
+  "note": "Generalised MARPOL Annex I special area polygons. Only the Gulf of Aden box is included, generalised, which is the nearest special area to the demo footprint. The Arabian Sea off India's west coast is NOT an Annex I special area, so the point-in-polygon test correctly answers no for this scenario. Replace with the full IMO special area set for any real use. See PLAN.md section 13.",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              43.0,
+              11.0
+            ],
+            [
+              51.5,
+              11.0
+            ],
+            [
+              51.5,
+              15.5
+            ],
+            [
+              43.0,
+              15.5
+            ],
+            [
+              43.0,
+              11.0
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "name": "Gulf of Aden (generalised)",
+        "instrument": "MARPOL Annex I"
+      }
+    }
+  ]
+}

@@ -1,11 +1,11 @@
 """Fast, no-OpenDrift tests for the validation harness's pure logic (PLAN.md
-section 13). The harness's end-to-end behaviour (real ensembles, real
+section 17.1). The harness's end-to-end behaviour (real ensembles, real
 scoring) is exercised by scripts/run_validation.py itself, which is slow
 enough that it belongs in a pre-demo checklist, not every `make test` run.
 """
 
 from services.core.schemas import SuspectScore
-from services.core.validation.harness import Accuracy, _culprit_margin, _culprit_rank
+from validation.harness import Accuracy, _culprit_margin, _culprit_rank
 
 
 def _score(mmsi: str, total: float) -> SuspectScore:

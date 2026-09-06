@@ -1,4 +1,5 @@
-# Pipeline-wide tiling, ensemble and path configuration. See PLAN.md sections 5, 6, 8.
+# Pipeline-wide tiling, ensemble, kernel and path configuration.
+# See PLAN.md sections 5, 5A, 6, 7, 9, 11, 14.
 
 seed: 26143
 
@@ -9,6 +10,7 @@ paths:
   data_fixtures: data/fixtures
   data_precomputed: data/precomputed
   models: data/models
+  cerulean: data/cerulean
 
 detection:
   model_repo: sahilvishwa2108/oil-spill-deeplab
@@ -23,13 +25,59 @@ detection:
     land_skip_fraction: 0.9  # skip tiles more than this fraction land/nodata
   polygonize:
     min_area_km2: 0.01
+  # Ship class extraction, which feeds the radar cross check in
+  # PLAN.md section 11. Bounds in pixels, applied to connected
+  # components of the Ships class, to reject speckle at the low end and
+  # mis-segmented land or platform at the high end.
+  ships:
+    min_pixel_area: 4
+    max_pixel_area: 20000
+
+# Which sensor adapter reads the scene (PLAN.md section 5A). Only
+# sentinel1 is implemented; eos04 is a documented stub.
+sensor: sentinel1
 
 wind_gate:
   wind_min_ms: 2.5
   wind_max_ms: 11.0
   downgrade_margin_ms: 1.0
 
+# Optical corroboration, PLAN.md section 7. SAR stays the primary
+# sensor: this only records whether a near-coincident optical scene
+# agrees, disagrees, or does not exist.
+optical:
+  window_hours: 6
+  # Fractional darkening of the detection polygon against a surrounding
+  # sea reference ring below which optical is taken to agree with SAR.
+  anomaly_threshold: 0.08
+
+# Radar to AIS association at acquisition time, PLAN.md section 11.
+radar_crosscheck:
+  # A ship target with no AIS position inside this radius at acquisition
+  # time is an unmatched target, i.e. radar observed dark.
+  match_radius_m: 1500.0
+  # Confidence falls linearly from 1.0 at zero distance to 0 at the
+  # match radius, so a marginal association is scored as marginal.
+  min_match_confidence: 0.1
+
+# Fixed offshore installations, PLAN.md section 14. If this much of the
+# origin field's mass sits this close to one, flag the case: the origin
+# envelope includes fixed infrastructure, so vessel attribution alone
+# may be incomplete. It never eliminates a vessel and never accuses the
+# installation.
+infrastructure:
+  layer_path: data/fixtures/offshore_infrastructure.geojson
+  radius_m: 5000.0
+  mass_threshold: 0.1
+
 hindcast:
+  # Which DriftKernel runs the ensemble, PLAN.md section 9.1.
+  # openoil: OpenDrift OpenOil, the default, for slicks.
+  # leeway: OpenDrift OceanDrift, for drifting objects and debris.
+  # null: seed geometry held fixed, for events with a fixed position.
+  # Swapping this is the one-line diff that demonstrates the engine is
+  # event agnostic. Every downstream stage runs unchanged against all three.
+  kernel: openoil
   backend: opendrift_openoil
   n_members_full: 30
   n_members_live_demo: 8
@@ -56,6 +104,21 @@ hindcast:
     # invents uncertainty the ensemble never produced and the field stops
     # shrinking as the scrubber approaches the acquisition time.
     gaussian_bandwidth_deg: 0.008
+
+# Forward forecast, PLAN.md section 15. Same kernel and the same
+# perturbed ensemble as the hindcast, positive time step, seeded from
+# the slick as detected. Kept out of the hindcast block on purpose: the
+# forward horizon is a response planning decision, the backward one is
+# an evidentiary one, and tuning one must not silently retune the other.
+#
+# The forecast is never an input to the scoring engine. That is enforced
+# in code, see forecast/forward.py:assert_not_scoring_input.
+forecast:
+  forward_horizon_hours: 24
+  # Fewer members than the hindcast's 30. The attribution rests on the
+  # backward field, so that is where the precompute budget goes; 16
+  # members still resolve the forecast envelope at this horizon.
+  n_members: 16
 
 ais:
   dark_gap_min_minutes: 20

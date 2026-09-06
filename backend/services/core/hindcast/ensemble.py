@@ -1,12 +1,27 @@
-"""Backward drift ensemble via OpenDrift's OpenOil backend. See PLAN.md
-section 8.
+"""Drift ensemble, run backward or forward. See PLAN.md sections 9 and 15.
 
 The ensemble construction is the contribution here, not the drift model
-itself: n_members independent backward runs, each seeded with particles
+itself: n_members independent runs, each seeded with particles
 uniformly inside the slick polygon and its own perturbed forcing (wind
 drift factor, current uncertainty, horizontal diffusivity, seed time
 jitter), all sampled from config with a fixed seed so two runs of the
-demo produce identical numbers (PLAN.md non-negotiable 6).
+demo produce identical numbers (PLAN.md non-negotiable 7).
+
+Which physics propagates those particles is a plug-in: the kernel comes
+from `hindcast.kernel` in config/pipeline.yaml and satisfies the
+DriftKernel protocol in drift/kernel.py. OpenOil for slicks, Leeway for
+drifting objects, null for fixed-position events. Everything downstream
+of this module consumes (n_particles, n_steps, 3) sample arrays and
+never asks what produced them, which is what makes the engine event
+agnostic rather than an oil pipeline with an abstraction bolted on.
+
+Direction is a parameter of the run, not of the module. The backward run
+answers "where did this come from", which is what the attribution rests
+on; the forward run answers "where does it go next", which is the
+response planning product in PLAN.md section 15. They share the seed
+particles, the member perturbations and the field builder, so the two
+halves of the drift picture meet exactly at the acquisition instant
+instead of being two independently drifting stories.
 """
 
 from __future__ import annotations
@@ -15,13 +30,13 @@ import datetime
 from dataclasses import dataclass
 
 import numpy as np
-import xarray as xr
-from opendrift.models.openoil import OpenOil
-from opendrift.readers import reader_netCDF_CF_generic
 from shapely.geometry import Point, shape
 from shapely.geometry.polygon import Polygon
 
+from services.core.drift.kernel import DriftKernel, Forcing, KernelParams, get_kernel
 from services.core.schemas import Detection
+
+DEFAULT_KERNEL = "openoil"
 
 
 @dataclass(frozen=True)
@@ -31,6 +46,16 @@ class EnsembleMemberConfig:
     current_uncertainty_ms: float
     horizontal_diffusivity: float
     seed_time_jitter_minutes: float
+
+    def to_kernel_params(self, time_step_minutes: float) -> KernelParams:
+        return KernelParams(
+            member_seed=self.member_seed,
+            wind_drift_factor=self.wind_drift_factor,
+            current_uncertainty_ms=self.current_uncertainty_ms,
+            horizontal_diffusivity=self.horizontal_diffusivity,
+            seed_time_jitter_minutes=self.seed_time_jitter_minutes,
+            time_step_minutes=time_step_minutes,
+        )
 
 
 def current_uncertainty_range(hindcast_cfg: dict) -> tuple[float, float]:
@@ -98,36 +123,10 @@ def seed_points_in_polygon(polygon: Polygon, n_points: int, rng: np.random.Gener
     return lons, lats
 
 
-def run_member(
-    member_cfg: EnsembleMemberConfig,
-    seed_lon: list[float],
-    seed_lat: list[float],
-    acquired_at: datetime.datetime,
-    current_reader,
-    wind_reader,
-    backward_horizon_hours: float,
-    time_step_minutes: float,
-) -> xr.Dataset:
-    """Runs one backward ensemble member. Returns OpenDrift's own result
-    Dataset, dims (trajectory, time)."""
-    o = OpenOil(loglevel=50)
-    o.set_config("drift:current_uncertainty", member_cfg.current_uncertainty_ms)
-    o.set_config("environment:fallback:horizontal_diffusivity", member_cfg.horizontal_diffusivity)
-    o.add_reader([current_reader, wind_reader])
-
-    seed_time = acquired_at + datetime.timedelta(minutes=member_cfg.seed_time_jitter_minutes)
-    np.random.seed(member_cfg.member_seed)
-    o.seed_elements(
-        lon=seed_lon,
-        lat=seed_lat,
-        time=seed_time,
-        wind_drift_factor=member_cfg.wind_drift_factor,
-    )
-    o.run(
-        duration=datetime.timedelta(hours=backward_horizon_hours),
-        time_step=-int(time_step_minutes * 60),
-    )
-    return o.result
+def resolve_kernel(pipeline_config: dict) -> DriftKernel:
+    """Which DriftKernel this run uses, from config. See PLAN.md section 9.1."""
+    hindcast_cfg = pipeline_config.get("hindcast", {})
+    return get_kernel(hindcast_cfg.get("kernel", DEFAULT_KERNEL))
 
 
 def run_ensemble(
@@ -137,9 +136,30 @@ def run_ensemble(
     acquired_at: datetime.datetime,
     pipeline_config: dict,
     n_members: int | None = None,
-) -> list[xr.Dataset]:
-    """Runs the full backward ensemble for one detection's slick polygon.
-    Returns one OpenDrift result Dataset per member, in member order."""
+    kernel: DriftKernel | None = None,
+    direction: str = "backward",
+    horizon_hours: float | None = None,
+) -> list[np.ndarray]:
+    """Runs the full ensemble for one detection's slick polygon.
+
+    Returns one (n_particles, n_steps, 3) array of lat, lon and epoch
+    seconds per member, in member order. Pass `kernel` to override the
+    configured one; otherwise it comes from `hindcast.kernel`.
+
+    `direction` picks which end of the kernel protocol runs.
+    "backward" is the origin question and defaults to
+    `hindcast.backward_horizon_hours`; "forward" is the forecast and
+    needs `horizon_hours` from the caller, because a forecast horizon is
+    a response planning decision and does not belong under `hindcast`.
+
+    The seed particles and the member perturbations are drawn from the
+    global seed before the direction is consulted, so a backward and a
+    forward run of the same detection start from exactly the same
+    particles under exactly the same sampled physics.
+    """
+    if direction not in ("backward", "forward"):
+        raise ValueError(f"direction must be 'backward' or 'forward', got {direction!r}")
+
     hindcast_cfg = pipeline_config["hindcast"]
     global_seed = pipeline_config["seed"]
 
@@ -150,19 +170,25 @@ def run_ensemble(
     seed_lon, seed_lat = seed_points_in_polygon(polygon, hindcast_cfg["particles_per_member"], rng)
     member_configs = sample_member_configs(n_members, hindcast_cfg, rng)
 
-    current_reader = reader_netCDF_CF_generic.Reader(current_path)
-    wind_reader = reader_netCDF_CF_generic.Reader(wind_path)
+    drift_kernel = kernel or resolve_kernel(pipeline_config)
+    forcing = Forcing(current_path=current_path, wind_path=wind_path)
+    time_step_minutes = hindcast_cfg["field"]["time_step_minutes"]
+
+    if horizon_hours is None:
+        if direction == "forward":
+            raise ValueError("a forward run needs an explicit horizon_hours, see config forecast.forward_horizon_hours")
+        horizon_hours = hindcast_cfg["backward_horizon_hours"]
+
+    run = drift_kernel.run_backward if direction == "backward" else drift_kernel.run_forward
 
     return [
-        run_member(
-            member_cfg,
+        run(
             seed_lon,
             seed_lat,
             acquired_at,
-            current_reader,
-            wind_reader,
-            hindcast_cfg["backward_horizon_hours"],
-            hindcast_cfg["field"]["time_step_minutes"],
+            horizon_hours,
+            forcing,
+            member_cfg.to_kernel_params(time_step_minutes),
         )
         for member_cfg in member_configs
     ]
