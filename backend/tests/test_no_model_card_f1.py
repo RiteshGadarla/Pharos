@@ -24,9 +24,16 @@ import os
 
 FORBIDDEN = "0.9668"
 
-# Directories scanned, relative to backend/. The frontend is scanned via
-# its own relative path since it sits outside this tree.
-SCAN_ROOTS = ["services", "validation", "scripts", "config", "../frontend/src", "../deck"]
+# Directories scanned, relative to backend/. The frontend, the deck and
+# the docs tree are scanned via their own relative paths since they sit
+# outside this tree.
+#
+# ../docs is in this list because the README was split into docs/ and the
+# paragraph that explains why this number is not used moved to
+# docs/DATA.md with it. A prose split is exactly how a guard like this
+# goes blind: the text moves, the test keeps passing, and nothing says
+# the scanned set no longer covers the file that matters.
+SCAN_ROOTS = ["services", "validation", "scripts", "config", "../frontend/src", "../deck", "../docs"]
 SCAN_FILES = ["../README.md"]
 SCAN_EXTENSIONS = {".py", ".ts", ".tsx", ".yaml", ".yml", ".md", ".html", ".css", ".json"}
 
@@ -85,3 +92,9 @@ def test_the_scan_actually_covers_something():
     assert len(files) > 30
     assert any(p.endswith("README.md") for p in files)
     assert any(p.endswith(".tsx") for p in files)
+    # The docs tree carries the prose that explains why the figure is not
+    # used, so a scan that misses it is a scan that misses the one file
+    # most likely to quote the number.
+    assert any(os.path.normpath(p).startswith(os.path.normpath("../docs")) for p in files), (
+        "../docs is not being scanned; the README split moved prose there"
+    )
