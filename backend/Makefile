@@ -1,33 +1,39 @@
-.PHONY: venv fetch-model ensure-fixtures fixtures ensure-demo-bundle up down run-core run-detection test test-core test-detection fetch-data seed-demo validate lint
+.PHONY: venv fetch-model ensure-fixtures synthetic fixtures sample ensure-demo-bundle up down run-core run-detection test test-core test-detection fetch-data seed-demo validate lint
 
 venv:
 	@if [ ! -d .venv ]; then python3.11 -m venv .venv; fi
 	.venv/bin/pip install --upgrade pip -q
 	.venv/bin/pip install -r requirements.txt
 
-# Regenerates every .nc / .tif fixture from scripts/make_fixture_*.py.
-# These aren't committed (see .gitignore): small, deterministic, fast to
-# rebuild, so there's no reason to carry ~2.8MB of binary diffs in git
-# history every time one changes. origin_field depends on currents and
-# wind_offshore already being on disk, so it runs last.
-fixtures:
-	PYTHONPATH=. .venv/bin/python scripts/make_fixture_scene.py
-	PYTHONPATH=. .venv/bin/python scripts/make_fixture_wind.py
-	PYTHONPATH=. .venv/bin/python scripts/make_fixture_currents.py
-	PYTHONPATH=. .venv/bin/python scripts/make_fixture_wind_offshore.py
-	PYTHONPATH=. .venv/bin/python scripts/make_fixture_origin_field.py
+# Regenerates every synthetic input from scratch: SAR scene, wind,
+# currents, offshore wind, cached origin field. One script rather than
+# five, and it resolves the dependency order itself (origin_field
+# integrates through currents and wind_offshore, so it runs last).
+#
+# DRISHTA needs no downloaded dataset to run. This target is what makes
+# that true, and it is the same script the README points Linux, macOS and
+# Windows users at.
+#
+# Apart from the staged sample scene these outputs aren't committed (see
+# .gitignore): small, deterministic and fast to rebuild, so there's no
+# reason to carry binary diffs in git history every time one changes.
+synthetic:
+	.venv/bin/python scripts/make_synthetic_data.py --force
 
-# Builds whichever fixtures are missing, skips the rest. Run `make
-# fixtures` directly to force a full regenerate (e.g. after editing a
-# make_fixture_*.py script).
+# Back-compat alias. `synthetic` is the name the README uses now.
+fixtures: synthetic
+
+# Builds whichever synthetic inputs are missing, skips the rest. Run
+# `make synthetic` directly to force a full regenerate (e.g. after
+# editing a make_fixture_*.py script).
 ensure-fixtures:
-	@if [ -f data/fixtures/synthetic_scene.tif ] && [ -f data/fixtures/synthetic_wind.nc ] && \
-	    [ -f data/fixtures/synthetic_currents.nc ] && [ -f data/fixtures/synthetic_wind_offshore.nc ] && \
-	    [ -f data/fixtures/synthetic_origin_field.nc ]; then \
-		echo "fixtures already present, skipping (run 'make fixtures' to regenerate)"; \
-	else \
-		$(MAKE) fixtures; \
-	fi
+	.venv/bin/python scripts/make_synthetic_data.py
+
+# Processes the staged sample SAR image through detection and writes
+# data/processed/sample_detections.geojson. The fastest check that an
+# install works: no database, no Docker, no frontend, no dataset.
+sample:
+	.venv/bin/python scripts/process_sample.py
 
 # Downloads the segmentation model (no auth needed) if it isn't already
 # on disk. See PLAN.md section 4A.

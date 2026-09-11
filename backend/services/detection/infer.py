@@ -12,7 +12,28 @@ from services.detection.tiling import SoftmaxAccumulator, TileWindow, select_til
 
 
 def load_model(model_path: str):
+    """Loads the segmentation model from local disk.
+
+    The weights are the one artifact DRISHTA cannot generate for itself
+    and cannot commit (they are ~200MB), so a missing file is the single
+    most likely first-run failure. Keras reports it as a bare
+    ValueError about the file format, which sends people looking at
+    their Keras version rather than at the download step, so the check
+    happens here with the command that fixes it attached.
+    """
+    import os
+
     import keras
+
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(
+            f"Segmentation model not found at {model_path}.\n"
+            "It is downloaded once from HuggingFace (no account, no API token) with:\n"
+            "    make fetch-model            (from backend/)\n"
+            "    make setup                  (from the repository root, does this and the rest)\n"
+            "This is the only download DRISHTA needs. Every data input it consumes is "
+            "generated locally by scripts/make_synthetic_data.py."
+        )
 
     return keras.saving.load_model(model_path, compile=False)
 
