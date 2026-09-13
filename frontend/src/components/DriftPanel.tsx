@@ -1,3 +1,4 @@
+import Accordion from "./Accordion";
 import type { DemoBundle } from "../types";
 import type { TimelineFrame } from "../lib/timeline";
 import { hoursFromAcquisition } from "../lib/timeline";
@@ -12,9 +13,9 @@ interface Props {
 // Stage 2's side panel: the ensemble that produced whichever field is
 // currently on screen, and what that field is allowed to be used for.
 //
-// The two fields are shown as two blocks rather than one, and the live
-// one is highlighted, because the single most important thing the room
-// has to take away from this stage is that they are different claims.
+// The two fields are shown as two sections rather than one, and the live
+// one is marked, because the single most important thing the room has
+// to take away from this stage is that they are different claims.
 // Backward is evidence: it is what the ranking in stage 3 integrates
 // over. Forward is a forecast: it informs a response and never touches
 // the ranking. Drawing them in one colour with one caption would blur
@@ -28,12 +29,7 @@ export default function DriftPanel({ bundle, frame, spreadKm }: Props) {
 
   return (
     <>
-      <section className={`stage-panel drift-block ${frame.direction === "backward" ? "live" : ""}`}>
-        <div className="drift-block-head">
-          <span className="drift-swatch backward" aria-hidden="true" />
-          <h2 className="evidence-heading">Backward: origin field</h2>
-          {frame.direction === "backward" && <span className="drift-live-chip">ON SCREEN</span>}
-        </div>
+      <Accordion title="Backward: origin field" swatch="backward" live={showingBackward} defaultOpen>
         <dl className="evidence-facts">
           <dt>Kernel</dt>
           <dd className="mono">{origin.kernel ?? "openoil"}</dd>
@@ -58,55 +54,43 @@ export default function DriftPanel({ bundle, frame, spreadKm }: Props) {
           A probability over latitude, longitude and time that sums to 1. It is never collapsed to a point, and it is
           the only field the vessel ranking in stage 3 reads.
         </p>
-      </section>
+      </Accordion>
 
-      {forecast ? (
-        <section className={`stage-panel drift-block ${frame.direction === "forward" ? "live" : ""}`}>
-          <div className="drift-block-head">
-            <span className="drift-swatch forward" aria-hidden="true" />
-            <h2 className="evidence-heading">Forward: forecast</h2>
-            {frame.direction === "forward" && <span className="drift-live-chip">ON SCREEN</span>}
-          </div>
-          <dl className="evidence-facts">
-            <dt>Kernel</dt>
-            <dd className="mono">{forecast.kernel ?? "openoil"}</dd>
-            <dt>Members</dt>
-            <dd className="mono">{forecast.n_members}</dd>
-            <dt>Horizon</dt>
-            <dd className="mono">{fieldSpanHours(forecast).toFixed(0)} h ahead</dd>
-            {!showingBackward && (
-              <>
-                <dt>Spread now</dt>
-                <dd className="mono">{spreadKm.toFixed(1)} km</dd>
-              </>
+      <Accordion title="Forward: forecast" swatch="forward" live={Boolean(forecast) && !showingBackward}>
+        {forecast ? (
+          <>
+            <dl className="evidence-facts">
+              <dt>Kernel</dt>
+              <dd className="mono">{forecast.kernel ?? "openoil"}</dd>
+              <dt>Members</dt>
+              <dd className="mono">{forecast.n_members}</dd>
+              <dt>Horizon</dt>
+              <dd className="mono">{fieldSpanHours(forecast).toFixed(0)} h ahead</dd>
+              {!showingBackward && (
+                <>
+                  <dt>Spread now</dt>
+                  <dd className="mono">{spreadKm.toFixed(1)} km</dd>
+                </>
+              )}
+            </dl>
+            {forecast.horizon_truncated && (
+              <p className="evidence-reason warn">
+                Short of the {forecast.requested_horizon_hours?.toFixed(0)} hours requested: the forcing data ends
+                before the horizon does.
+              </p>
             )}
-          </dl>
-          {forecast.horizon_truncated && (
-            <p className="evidence-reason warn">
-              Short of the {forecast.requested_horizon_hours?.toFixed(0)} hours requested: the forcing data ends
-              before the horizon does.
+            <p className="evidence-reason">
+              Same kernel and the same seed particles, run with a positive time step. This is a response planning
+              product and is never an input to the ranking.
             </p>
-          )}
-          <p className="evidence-reason">
-            Same kernel and the same seed particles, run with a positive time step. This is a response planning
-            product and is never an input to the ranking.
-          </p>
-        </section>
-      ) : (
-        <section className="stage-panel">
-          <h2 className="evidence-heading">Forward: forecast</h2>
-          <p className="evidence-reason muted">
-            No forecast field in this bundle. Run make seed-demo to build one.
-          </p>
-        </section>
-      )}
+          </>
+        ) : (
+          <p className="evidence-reason muted">No forecast field in this bundle. Run make seed-demo to build one.</p>
+        )}
+      </Accordion>
 
       {bundle.origin_window && (
-        <section className="stage-panel">
-          <div className="drift-block-head">
-            <span className="drift-swatch window" aria-hidden="true" />
-            <h2 className="evidence-heading">Origin window</h2>
-          </div>
+        <Accordion title="Origin window" swatch="window">
           <dl className="evidence-facts">
             <dt>Age band</dt>
             <dd className="mono">{bundle.origin_window.age_band}</dd>
@@ -119,11 +103,10 @@ export default function DriftPanel({ bundle, frame, spreadKm }: Props) {
           {/* The only evidence in the case about WHEN, and until this
               existed it never reached the ranking. */}
           <p className="evidence-reason">{bundle.origin_window.statement}</p>
-        </section>
+        </Accordion>
       )}
 
-      <section className="stage-panel">
-        <h2 className="evidence-heading">Provenance</h2>
+      <Accordion title="Provenance" swatch="provenance">
         <dl className="evidence-facts">
           <dt>Forcing</dt>
           <dd className="mono wrap">{origin.forcing_source ?? "unspecified"}</dd>
@@ -138,7 +121,7 @@ export default function DriftPanel({ bundle, frame, spreadKm }: Props) {
           Both fields come from the same precomputed bundle. Nothing on screen is interpolated between them: the
           origin field owns every instant up to acquisition, the forecast owns every instant after it.
         </p>
-      </section>
+      </Accordion>
     </>
   );
 }

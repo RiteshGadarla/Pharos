@@ -38,7 +38,7 @@ Underneath that sits an architectural claim: **the drift kernel is a plug in**. 
 git clone https://github.com/RiteshGadarla/Slicktrace.git && cd Slicktrace
 make setup     # venv, model weights, synthetic data, demo bundle, frontend deps
 make sample    # process the staged sample SAR image, print the oil detections
-make dev       # core service on :8000 and the operator console on :5173
+make dev       # core service on :8000, landing page on :5173, operator console on :5173/run
 ```
 
 ```

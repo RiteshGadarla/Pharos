@@ -1,3 +1,4 @@
+import Accordion from "./Accordion";
 import EvidencePanel from "./EvidencePanel";
 import type { DemoBundle } from "../types";
 
@@ -19,8 +20,7 @@ export default function ScenePanel({ bundle }: Props) {
 
   return (
     <>
-      <section className="stage-panel">
-        <h2 className="evidence-heading">Acquisition</h2>
+      <Accordion title="Acquisition" defaultOpen>
         <dl className="evidence-facts">
           <dt>Scene</dt>
           <dd className="mono">{scene.scene_id}</dd>
@@ -31,20 +31,19 @@ export default function ScenePanel({ bundle }: Props) {
           <dt>CRS</dt>
           <dd className="mono">{scene.crs}</dd>
           <dt>Footprint</dt>
-          <dd className="mono">{formatBbox(scene.bbox)}</dd>
+          <dd className="mono wrap">{formatBbox(scene.bbox)}</dd>
         </dl>
         <p className="evidence-reason muted">{scene.note}</p>
-      </section>
+      </Accordion>
 
-      <section className="stage-panel">
-        <h2 className="evidence-heading">Candidates</h2>
+      <Accordion title="Candidates">
         <dl className="evidence-facts">
           <dt>Polygons</dt>
           <dd className="mono">{bundle.detections.length}</dd>
           <dt>Suppressed</dt>
           <dd className="mono">{suppressed}</dd>
           <dt>Primary</dt>
-          <dd className="mono">{primary?.detection_id ?? "none"}</dd>
+          <dd className="mono wrap">{primary?.detection_id ?? "none"}</dd>
         </dl>
         {/* A suppressed detection is marked, never deleted. Saying so
             here is the difference between a filter and a disappearance. */}
@@ -52,7 +51,7 @@ export default function ScenePanel({ bundle }: Props) {
           Suppressed polygons stay on the map in grey with their reason on hover. Nothing the detector found is
           removed from the record.
         </p>
-      </section>
+      </Accordion>
 
       <EvidencePanel bundle={bundle} />
     </>

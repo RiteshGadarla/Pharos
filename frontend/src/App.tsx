@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadDemoBundle } from "./api";
-import Header from "./components/Header";
+import Navbar, { type RightTab } from "./components/Navbar";
 import ForcingReadout from "./components/ForcingReadout";
 import LayerToggles from "./components/LayerToggles";
 import MapLegend from "./components/MapLegend";
@@ -23,8 +23,6 @@ import type { DemoBundle } from "./types";
 import { isDarkAt } from "./lib/geo";
 import { fieldSliceSpreadKm } from "./lib/fieldRaster";
 import "./App.css";
-
-type RightTab = "case" | "suspects" | "eliminations" | "ledgers";
 
 export default function App() {
   const [bundle, setBundle] = useState<DemoBundle | null>(null);
@@ -184,7 +182,14 @@ function Console({ bundle }: { bundle: DemoBundle }) {
 
   return (
     <div className="app-shell">
-      <Header bundle={bundle} />
+      <Navbar
+        stage={stage.ordinal}
+        rightTab={rightTab}
+        onNavigate={(ordinal, tab) => {
+          goToStage(ordinal);
+          if (tab) setRightTab(tab);
+        }}
+      />
       <StageRail bundle={bundle} stage={stage} onSelect={goToStage} />
       <div className="app-body">
         <div className="map-pane">

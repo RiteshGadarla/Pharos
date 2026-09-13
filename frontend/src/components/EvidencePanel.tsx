@@ -1,3 +1,4 @@
+import Accordion from "./Accordion";
 import type { DemoBundle } from "../types";
 
 interface Props {
@@ -33,8 +34,7 @@ export default function EvidencePanel({ bundle }: Props) {
   const win = bundle.origin_window;
 
   return (
-    <section className="evidence-panel">
-      <h2 className="evidence-heading">Scene evidence</h2>
+    <Accordion title="Scene evidence" defaultOpen>
 
       {primary && (
         <div className="evidence-row">
@@ -109,6 +109,6 @@ export default function EvidencePanel({ bundle }: Props) {
           </>
         )}
       </dl>
-    </section>
+    </Accordion>
   );
 }

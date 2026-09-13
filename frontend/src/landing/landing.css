@@ -1,0 +1,621 @@
+/* =========================================================
+   DRISHTA
+   MARITIME INTELLIGENCE
+   ========================================================= */
+@import "@fontsource/eb-garamond/400.css";
+@import "@fontsource/eb-garamond/500.css";
+@import "@fontsource/eb-garamond/600.css";
+
+/* =========================================================
+   ROOT
+   ========================================================= */
+/* Flat throughout: no gradients, glows or blur. */
+:root {
+  --font-title: "EB Garamond", Garamond, "Adobe Garamond Pro", Georgia, serif;
+  --font-body: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: var(--font-body);
+  color: #d7eff9;
+  background: #020c16;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+/* =========================================================
+   GLOBAL RESET
+   ========================================================= */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: 320px;
+  overflow: hidden;
+  background: #020c16;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* =========================================================
+   MAIN DASHBOARD
+   ========================================================= */
+.dashboard {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  isolation: isolate;
+  background: #020c16;
+}
+
+/* =========================================================
+   BACKGROUND VIDEO
+   ========================================================= */
+.bg-video {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+/* =========================================================
+   VIDEO OVERLAY
+   ========================================================= */
+.video-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: rgba(1, 10, 18, 0.18);
+}
+
+/* =========================================================
+   HERO
+   ========================================================= */
+.hero {
+  position: absolute;
+  z-index: 7;
+  top: 22%;
+  left: 3%;
+  width: 47%;
+  max-width: 760px;
+}
+
+/* the product name, above the pitch */
+.hero-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 34px;
+}
+
+.hero-brand-mark {
+  flex-shrink: 0;
+  color: #57cfff;
+  transform: rotate(-25deg);
+}
+
+.hero-brand-text strong {
+  display: block;
+  font: 600 36px/1 var(--font-title);
+  letter-spacing: 0.16em;
+  color: #e8f7ff;
+}
+
+.hero-brand-text span {
+  display: block;
+  margin-top: 6px;
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  color: #73b7d4;
+}
+
+.eyebrow {
+  margin: 0 0 14px;
+  color: #77b4cc;
+  font-size: 10px;
+  letter-spacing: 0.25em;
+}
+
+.hero h1 {
+  margin: 0;
+  color: #e9f5f9;
+  font: 500 clamp(40px, 3.7vw, 66px) / 1.02 var(--font-title);
+  letter-spacing: 0;
+}
+
+.hero h1 em {
+  font-style: normal;
+  color: #23bdf6;
+}
+
+.tagline {
+  margin: 18px 0 23px;
+  color: #81cdec;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+}
+
+/* =========================================================
+   HERO BUTTONS
+   ========================================================= */
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.primary-button,
+.secondary-button {
+  height: 47px;
+  padding: 0 19px;
+  border-radius: 5px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  transition: background 0.3s ease;
+}
+
+/* =========================================================
+   PRIMARY
+   ========================================================= */
+.primary-button {
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 17px;
+  border: 1px solid #29c5fc;
+  background: #1262f3;
+  color: #ffffff;
+}
+
+.primary-button:hover {
+  background: #12a8e9;
+}
+
+/* =========================================================
+   SECONDARY
+   ========================================================= */
+.secondary-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  border: 1px solid #1599db;
+  background: rgba(3, 21, 36, 0.72);
+  color: #d9f5ff;
+}
+
+.secondary-button:hover {
+  background: rgba(9, 67, 95, 0.78);
+}
+
+/* =========================================================
+   INTELLIGENCE PANEL
+   ========================================================= */
+.intel-panel {
+  position: absolute;
+  z-index: 9;
+  top: 18%;
+  right: 3%;
+  width: 25%;
+  min-width: 320px;
+  max-width: 470px;
+  padding: 19px 20px 20px;
+  border: 1px solid rgba(76, 152, 191, 0.68);
+  border-radius: 2px;
+  background: rgba(5, 26, 43, 0.88);
+}
+
+/* =========================================================
+   PANEL HEADER
+   ========================================================= */
+.panel-rule {
+  width: 30px;
+  height: 2px;
+  background: #2ad0ff;
+}
+
+.intel-panel h2 {
+  margin: 11px 0 5px;
+  font: 500 22px/1.08 var(--font-title);
+  letter-spacing: 0.02em;
+  text-wrap: balance;
+  color: #d9f4fb;
+}
+
+.panel-intro {
+  margin: 0;
+  color: #89c2d7;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* =========================================================
+   INTELLIGENCE ITEMS
+   ========================================================= */
+.intel-items {
+  margin-top: 18px;
+}
+
+.intel-item {
+  display: flex;
+  gap: 13px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(100, 171, 198, 0.2);
+  transition: background 0.3s ease;
+}
+
+.intel-item:hover {
+  background: rgba(30, 133, 173, 0.1);
+}
+
+/* =========================================================
+   NUMBER
+   ========================================================= */
+.intel-number {
+  width: 22px;
+  flex: 0 0 22px;
+  color: #d4edf5;
+  font: 500 19px/1 var(--font-title);
+}
+
+/* =========================================================
+   CONTENT
+   ========================================================= */
+.intel-content {
+  min-width: 0;
+}
+
+.intel-item b {
+  display: block;
+  color: #bde7f5;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.intel-item p {
+  margin: 6px 0 0;
+  color: #85b5c6;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+/* =========================================================
+   PROGRESS
+   ========================================================= */
+.progress-line {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  margin: 23px 8px 8px;
+}
+
+.progress-line::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #238ac0;
+}
+
+.progress-line span {
+  position: relative;
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #67ddff;
+  border-radius: 50%;
+  background: #05243c;
+}
+
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+  color: #cbe8f1;
+  font-size: 8px;
+}
+
+.progress-labels b {
+  font-weight: 400;
+}
+
+/* =========================================================
+   VIDEO CREDIT / GEMINI COVER
+   ========================================================= */
+.video-credit {
+  position: absolute;
+  right: 48px;
+  bottom: 70px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 13px;
+  background: rgba(4, 17, 25, 0.96);
+  pointer-events: none;
+  border-top: 1px solid rgba(70, 188, 215, 0.48);
+  border-left: 1px solid rgba(70, 188, 215, 0.22);
+}
+
+.video-credit-line {
+  width: 24px;
+  height: 2px;
+  flex-shrink: 0;
+  background: #36c7ef;
+}
+
+.video-credit-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.video-credit-content span {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: rgba(225, 249, 252, 0.95);
+}
+
+.video-credit-content small {
+  font-size: 7px;
+  letter-spacing: 0.12em;
+  color: rgba(127, 185, 198, 0.72);
+}
+
+/* =========================================================
+   BOTTOM BAR
+   ========================================================= */
+.bottombar {
+  position: absolute;
+  z-index: 10;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 3%;
+  background: rgba(2, 14, 25, 0.88);
+  color: #80a9b8;
+  font-size: 8px;
+  letter-spacing: 0.03em;
+  border-top: 1px solid rgba(58, 148, 187, 0.4);
+}
+
+/* =========================================================
+   FOOTER LEFT
+   ========================================================= */
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  max-width: 40%;
+}
+
+.footer-left b svg {
+  color: #57cfff;
+}
+
+.footer-left b {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #d9f5ff;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.footer-left > span {
+  height: 13px;
+  border-left: 1px solid #42809c;
+}
+
+/* =========================================================
+   POWERED
+   ========================================================= */
+.powered {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 34%;
+  text-align: right;
+}
+
+.powered i {
+  display: block;
+  width: 38px;
+  height: 1px;
+  flex-shrink: 0;
+  background: #36c0ef;
+}
+
+/* =========================================================
+   SMALLER DESKTOP
+   ========================================================= */
+@media (max-width: 1250px) {
+  .intel-panel {
+    width: 29%;
+  }
+
+  .hero {
+    width: 48%;
+  }
+}
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+@media (max-width: 1000px) {
+  .hero {
+    width: 52%;
+  }
+
+  .hero h1 {
+    font-size: 46px;
+  }
+
+  .intel-panel {
+    width: 31%;
+    min-width: 280px;
+  }
+}
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+@media (max-width: 760px) {
+  /* Let the document itself scroll: the desktop layout pins all three
+     to the viewport height. */
+  html,
+  body,
+  #root {
+    height: auto;
+    min-height: 100%;
+  }
+
+  body {
+    overflow: visible;
+  }
+
+  /* Hero and panel stack in normal flow here, instead of sitting at
+     fixed offsets, so the page grows to fit them above the footer. */
+  .dashboard {
+    min-height: 100vh;
+    height: auto;
+    padding: 90px 20px 150px;
+  }
+
+  /* -------------------------------------------------------
+     HERO
+     ------------------------------------------------------- */
+  .hero {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: auto;
+    max-width: none;
+  }
+
+  .eyebrow {
+    font-size: 8px;
+    letter-spacing: 0.18em;
+  }
+
+  .hero-brand {
+    margin-bottom: 26px;
+  }
+
+  .hero-brand-text strong {
+    font-size: 28px;
+  }
+
+  .hero h1 {
+    font-size: clamp(36px, 10vw, 54px);
+  }
+
+  .tagline {
+    max-width: 320px;
+    font-size: 10px;
+    line-height: 1.6;
+  }
+
+  .hero-actions {
+    flex-wrap: wrap;
+  }
+
+  /* -------------------------------------------------------
+     INTELLIGENCE PANEL
+     ------------------------------------------------------- */
+  .intel-panel {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    margin-top: 44px;
+  }
+
+  .intel-item p {
+    max-width: 290px;
+  }
+
+  /* -------------------------------------------------------
+     GEMINI COVER
+     ------------------------------------------------------- */
+  .video-credit {
+    right: 20px;
+    bottom: 75px;
+  }
+
+  /* -------------------------------------------------------
+     FOOTER
+     ------------------------------------------------------- */
+  .bottombar {
+    padding: 12px 20px;
+    min-height: 65px;
+  }
+
+  .footer-left {
+    max-width: 42%;
+    line-height: 1.5;
+  }
+
+  .footer-left small,
+  .footer-left > span {
+    display: none;
+  }
+
+  .powered {
+    max-width: 35%;
+  }
+
+  .powered i {
+    display: none;
+  }
+
+  .powered span {
+    font-size: 7px;
+  }
+}
+
+/* =========================================================
+   VERY SMALL MOBILE
+   ========================================================= */
+@media (max-width: 480px) {
+  .hero h1 {
+    font-size: 36px;
+  }
+
+  .primary-button,
+  .secondary-button {
+    height: 43px;
+    padding: 0 15px;
+    font-size: 9px;
+  }
+
+  .video-credit {
+    display: none;
+  }
+}
