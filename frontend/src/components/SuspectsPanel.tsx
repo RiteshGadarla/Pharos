@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { FACTOR_LABELS, type DemoBundle } from "../types";
+import { ArrowRight } from "lucide-react";
+import Disclosure from "./Disclosure";
+import FactorBars from "./FactorBars";
+import type { DemoBundle } from "../types";
 
 interface Props {
   bundle: DemoBundle;
@@ -9,6 +12,10 @@ interface Props {
   onSelectVessel: (mmsi: string | null) => void;
 }
 
+// The ranked survivors. A row expands to its factor bars in place, and
+// hovering one lights its track on the map. Following a vessel is its own
+// button, because it swaps the panel for that vessel's story and an
+// expand should not do that by surprise.
 export default function SuspectsPanel({ bundle, hoveredMmsi, selectedMmsi, onHoverVessel, onSelectVessel }: Props) {
   const [expanded, setExpanded] = useState<string | null>(bundle.culprit_mmsi);
   const maxTotal = Math.max(...bundle.suspects.map((s) => s.total), 1e-6);
@@ -24,54 +31,32 @@ export default function SuspectsPanel({ bundle, hoveredMmsi, selectedMmsi, onHov
         return (
           <div
             key={s.mmsi}
-            className={`suspect-row ${isFocused ? "focused" : ""} ${isCulprit ? "rank1" : ""}`}
+            className={`suspect-row${isFocused ? " focused" : ""}${isCulprit ? " rank1" : ""}${isOpen ? " open" : ""}`}
             onMouseEnter={() => onHoverVessel(s.mmsi)}
             onMouseLeave={() => onHoverVessel(null)}
-            onClick={() => {
-              onSelectVessel(s.mmsi);
-              setExpanded(isOpen ? null : s.mmsi);
-            }}
           >
-            <div className="suspect-summary">
-              <span className="suspect-rank">#{s.rank}</span>
-              <span className="suspect-mmsi">{s.mmsi}</span>
-              <span className="suspect-type">{vessel?.vessel_type ?? ""}</span>
-              <div className="suspect-bar-track">
-                <div
-                  className="suspect-bar-fill"
-                  style={{ width: `${Math.max(4, (s.total / maxTotal) * 100)}%` }}
-                />
-              </div>
-              <span className="suspect-total">{s.total.toFixed(2)}</span>
-            </div>
+            <button className="suspect-summary" onClick={() => setExpanded(isOpen ? null : s.mmsi)} aria-expanded={isOpen}>
+              <span className="suspect-rank mono">#{s.rank}</span>
+              <span className="suspect-id">
+                <span className="suspect-mmsi mono">{s.mmsi}</span>
+                <span className="suspect-type">{vessel?.vessel_type ?? ""}</span>
+              </span>
+              <span className="suspect-bar-track">
+                <span className="suspect-bar-fill" style={{ width: `${Math.max(3, (Math.max(0, s.total) / maxTotal) * 100)}%` }} />
+              </span>
+              <span className="suspect-total mono">{s.total.toFixed(2)}</span>
+            </button>
             {isOpen && (
               <div className="suspect-detail">
-                {Object.entries(s.factors)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([name, value]) => {
-                    const maxFactor = Math.max(...Object.values(s.factors).map((v) => Math.abs(v)), 1e-6);
-                    const widthPct = Math.max(2, (Math.abs(value) / maxFactor) * 100);
-                    return (
-                      <div className="factor-row" key={name}>
-                        <span className="factor-label">{FACTOR_LABELS[name] ?? name}</span>
-                        <div className="factor-bar-track">
-                          <div
-                            className={`factor-bar-fill ${value < 0 ? "negative" : ""}`}
-                            style={{ width: `${widthPct}%` }}
-                          />
-                        </div>
-                        <span className="factor-value">{value.toFixed(3)}</span>
-                      </div>
-                    );
-                  })}
+                <FactorBars factors={s.factors} digits={3} />
                 {s.radar_support && (
                   <p className="suspect-radar">
-                    Radar support: {s.radar_support}. An unmatched ship target in the SAR scene fell inside
-                    this vessel's dead-reckoned dark envelope, over live origin field mass.
+                    Radar support: <span className="mono">{s.radar_support}</span>. An unmatched ship target in the SAR
+                    scene fell inside this vessel's dead-reckoned dark envelope, over live origin field mass.
                   </p>
                 )}
                 {vessel?.integrity_flags && vessel.integrity_flags.length > 0 && (
-                  <ul className="suspect-flags">
+                  <ul className="flag-list">
                     {vessel.integrity_flags.map((flag, i) => (
                       <li key={`${flag.kind}-${i}`}>
                         <span className="mono">{flag.kind}</span> {flag.detail}
@@ -79,7 +64,15 @@ export default function SuspectsPanel({ bundle, hoveredMmsi, selectedMmsi, onHov
                     ))}
                   </ul>
                 )}
-                <p className="suspect-narrative">{s.narrative}</p>
+                <div className="suspect-actions">
+                  <Disclosure label="In plain words">
+                    <p>{s.narrative}</p>
+                  </Disclosure>
+                  <button className="link-button" onClick={() => onSelectVessel(s.mmsi)}>
+                    Follow on the map
+                    <ArrowRight size={15} strokeWidth={1.8} aria-hidden="true" />
+                  </button>
+                </div>
               </div>
             )}
           </div>

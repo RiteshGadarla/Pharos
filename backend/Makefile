@@ -1,4 +1,4 @@
-.PHONY: venv fetch-model ensure-fixtures synthetic fixtures sample ensure-demo-bundle up down run-core run-detection test test-core test-detection fetch-data seed-demo validate lint
+.PHONY: venv fetch-model ensure-fixtures synthetic fixtures sample ensure-demo-bundle up down run-core run-detection test test-core test-detection fetch-data seed-demo seed-case publish-cases validate lint
 
 venv:
 	@if [ ! -d .venv ]; then python3.11 -m venv .venv; fi
@@ -6,9 +6,10 @@ venv:
 	.venv/bin/pip install -r requirements.txt
 
 # Regenerates every synthetic input from scratch: SAR scene, wind,
-# currents, offshore wind, cached origin field. One script rather than
-# five, and it resolves the dependency order itself (origin_field
-# integrates through currents and wind_offshore, so it runs last).
+# currents, offshore wind, cached origin field, and each case study's
+# scene, wind and currents (config/cases.yaml). One script rather than
+# several, and it resolves the dependency order itself (origin_field
+# integrates through currents and wind_offshore, so it runs after them).
 #
 # DRISHTA needs no downloaded dataset to run. This target is what makes
 # that true, and it is the same script the README points Linux, macOS and
@@ -50,11 +51,11 @@ shutil.copy(p, 'data/models/oil-spill-deeplab/model.keras'); \
 print('downloaded to data/models/oil-spill-deeplab/model.keras')"; \
 	fi
 
-# Builds the precomputed demo bundle only if it isn't already there.
+# Builds the precomputed case bundles only if they aren't already there.
 # Run `make seed-demo` directly to force a fresh regenerate.
 ensure-demo-bundle:
-	@if [ -f data/precomputed/demo_bundle.json ] && [ -f data/precomputed/scene_preview.png ]; then \
-		echo "demo bundle already present, skipping (run 'make seed-demo' to regenerate)"; \
+	@if [ -f data/precomputed/demo_bundle.json ] && [ -f data/precomputed/scene_preview.png ] && [ -f data/precomputed/cases.json ]; then \
+		echo "demo bundles already present, skipping (run 'make seed-demo' to regenerate)"; \
 	else \
 		$(MAKE) seed-demo; \
 	fi
@@ -82,13 +83,26 @@ test-detection:
 fetch-data:
 	bash scripts/fetch_data.sh
 
+# Every case study in config/cases.yaml, then the case index, then a copy
+# of all of it into the frontend's static data. The default case is also
+# written to the original single-bundle paths. Each case runs the full
+# 30 member ensemble, so this takes a while; see seed-case for one.
 seed-demo: ensure-fixtures
-	PYTHONPATH=. .venv/bin/python scripts/seed_demo.py
-	@mkdir -p ../frontend/public/data
-	cp data/precomputed/demo_bundle.json ../frontend/public/data/demo_bundle.json
-	cp data/precomputed/case_dossier.pdf ../frontend/public/data/case_dossier.pdf
-	cp data/precomputed/scene_preview.png ../frontend/public/data/scene_preview.png
-	@echo "copied to ../frontend/public/data/"
+	PYTHONPATH=. .venv/bin/python scripts/seed_demo.py --all
+	$(MAKE) publish-cases
+
+# One case: make seed-case CASE=monsoon-high-wind. The index is rebuilt
+# from every bundle on disk, so other cases already built stay listed.
+seed-case: ensure-fixtures
+	@if [ -z "$(CASE)" ]; then echo "usage: make seed-case CASE=<id>, ids are in config/cases.yaml"; exit 2; fi
+	PYTHONPATH=. .venv/bin/python scripts/seed_demo.py --case $(CASE)
+	$(MAKE) publish-cases
+
+# Copies cases.json, every indexed case's outputs and the default case's
+# top-level files into ../frontend/public/data/, removing any case
+# directory there that the index does not list.
+publish-cases:
+	PYTHONPATH=. .venv/bin/python scripts/publish_cases.py
 
 validate: ensure-fixtures
 	PYTHONPATH=. .venv/bin/python scripts/run_validation.py

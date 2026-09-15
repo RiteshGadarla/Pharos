@@ -353,7 +353,7 @@ export interface DemoBundle {
   eliminations: (EliminationJSON & { mmsi: string })[];
   suspects: (SuspectScoreJSON & { mmsi: string })[];
   case_build?: CaseBuildJSON;
-  culprit_mmsi: string;
+  culprit_mmsi: string | null;
   optical?: OpticalCorroborationJSON;
   verdict?: CaseVerdictJSON;
   marpol?: MarpolAssessmentJSON | null;
@@ -384,3 +384,34 @@ export const VERDICT_BLURBS: Record<VerdictClass, string> = {
   DARK_CONFIRMED:
     "No broadcasting vessel is a plausible candidate, and radar saw a hull in the origin envelope that AIS never reported.",
 };
+
+// One entry in the case index served at /api/cases, or statically at
+// /data/cases.json. Every case's bundle_url serves a DemoBundle of exactly
+// the shape above; the index only carries what the switcher needs to
+// tell the cases apart before loading one, which is the wind regime and
+// the verdict class, since those are what the cases differ by.
+export interface CaseSummary {
+  id: string;
+  case_id: string;
+  title: string;
+  subtitle: string;
+  region: string;
+  acquired_at: string;
+  verdict: VerdictClass;
+  gate_verdict: GateVerdict;
+  wind_ms: number;
+  wind_summary: string;
+  n_vessels: number;
+  n_suspects: number;
+  n_eliminated: number;
+  culprit_mmsi: string | null;
+  bundle_url: string;
+  scene_preview_url: string;
+  dossier_url: string;
+}
+
+export interface CasesIndex {
+  default_case: string;
+  generated_at: string;
+  cases: CaseSummary[];
+}

@@ -30,7 +30,7 @@ export function useViewPresets(bundle: DemoBundle): ViewPreset[] {
         key: "scene",
         label: "Scene",
         title: "The SAR scene footprint and the slick detected on it.",
-        bounds: padBounds(sceneBounds(bundle), 0.45),
+        bounds: padBounds(sceneBounds(bundle), 0.12),
       },
       {
         key: "origin",

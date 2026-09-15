@@ -15,9 +15,9 @@ interface Props {
 // half a knot, and the difference is the difference between an origin
 // two kilometres away and one twenty.
 //
-// It also answers the obvious question the drift stage raises and never
-// otherwise addresses: why does the origin field lean that way. Because
-// the water was going that way, at this speed, at this time.
+// One row of numbers rather than a card, so it reads as an instrument
+// on the chart and not as another panel. Its source is named in the
+// map's provenance chip, with the other animated layers.
 export default function ForcingReadout({ bundle, timeMs }: Props) {
   const forcing = bundle.forcing;
   if (!forcing) return null;
@@ -26,48 +26,34 @@ export default function ForcingReadout({ bundle, timeMs }: Props) {
   const r = readingAt(forcing, (s + n) / 2, (w + e) / 2, timeMs);
 
   return (
-    <div className="forcing-readout">
-      <div className="forcing-head">
-        <span className="forcing-title">Conditions at the slick</span>
-        <span
-          className="forcing-note"
-          title={forcing.provenance.note}
-        >
-          {forcing.provenance.time_step_hours}h steps
-        </span>
-      </div>
-
-      <div className="forcing-grid">
-        <Cell
-          label="Current"
-          value={r.currentSpeed !== null ? `${r.currentSpeed.toFixed(2)} m/s` : "n/a"}
-          bearing={r.currentTowardDeg}
-          swatch="current"
-          title="Surface current at the slick. The water that carried the oil. Bearing is the direction it flows towards."
-        />
-        <Cell
-          label="Wind"
-          value={r.windSpeed !== null ? `${r.windSpeed.toFixed(1)} m/s` : "n/a"}
-          bearing={r.windTowardDeg}
-          swatch="wind"
-          title="10 m wind. Pushes surface oil at roughly 3 percent of its speed, and outside 2.5 to 11 m/s a dark patch on SAR stops being interpretable at all. Bearing is the direction it blows towards."
-        />
-        <Cell
-          label="Sea temp"
-          value={r.sstC !== null ? `${r.sstC.toFixed(1)} C` : "n/a"}
-          title="Sea surface temperature. Warmer water weathers and evaporates oil faster, which is part of why the age band is a band."
-        />
-        <Cell
-          label="Air temp"
-          value={r.airTempC !== null ? `${r.airTempC.toFixed(1)} C` : "n/a"}
-          title="2 m air temperature."
-        />
-      </div>
-
-      {/* PLAN.md 16A: every layer that moves names its source. */}
-      <div className="forcing-provenance" title={forcing.provenance.note}>
-        {forcing.provenance.current_source}
-      </div>
+    <div className="forcing-readout map-card" title={forcing.provenance.note}>
+      <span className="forcing-title">
+        At the slick
+        <span className="forcing-note mono">{forcing.provenance.time_step_hours} h steps</span>
+      </span>
+      <Cell
+        label="Current"
+        value={r.currentSpeed !== null ? r.currentSpeed.toFixed(2) : "n/a"}
+        unit="m/s"
+        bearing={r.currentTowardDeg}
+        swatch="current"
+        title="Surface current at the slick. The water that carried the oil. Bearing is the direction it flows towards."
+      />
+      <Cell
+        label="Wind"
+        value={r.windSpeed !== null ? r.windSpeed.toFixed(1) : "n/a"}
+        unit="m/s"
+        bearing={r.windTowardDeg}
+        swatch="wind"
+        title="10 m wind. Pushes surface oil at roughly 3 percent of its speed, and outside 2.5 to 11 m/s a dark patch on SAR stops being interpretable at all. Bearing is the direction it blows towards."
+      />
+      <Cell
+        label="Sea"
+        value={r.sstC !== null ? r.sstC.toFixed(1) : "n/a"}
+        unit="°C"
+        title="Sea surface temperature. Warmer water weathers and evaporates oil faster, which is part of why the age band is a band."
+      />
+      <Cell label="Air" value={r.airTempC !== null ? r.airTempC.toFixed(1) : "n/a"} unit="°C" title="2 m air temperature." />
     </div>
   );
 }
@@ -75,12 +61,14 @@ export default function ForcingReadout({ bundle, timeMs }: Props) {
 function Cell({
   label,
   value,
+  unit,
   bearing,
   swatch,
   title,
 }: {
   label: string;
   value: string;
+  unit: string;
   bearing?: number | null;
   swatch?: "current" | "wind";
   title: string;
@@ -91,21 +79,20 @@ function Cell({
         {swatch && <span className={`forcing-swatch ${swatch}`} aria-hidden="true" />}
         {label}
       </span>
-      <span className="mono forcing-value">{value}</span>
-      {bearing !== undefined && bearing !== null && (
-        <span className="forcing-bearing">
-          {/* Rotated to match the map's arrows, so the readout and the
-              chart cannot disagree about which way the water is going. */}
-          <span
-            className="forcing-arrow"
-            style={{ transform: `rotate(${bearing}deg)` }}
-            aria-hidden="true"
-          >
-            ↑
+      <span className="forcing-value">
+        <span className="mono">{value}</span>
+        <span className="forcing-unit">{unit}</span>
+        {bearing !== undefined && bearing !== null && (
+          <span className="forcing-bearing" title={`towards ${Math.round(bearing)} degrees`}>
+            {/* Rotated to match the map's arrows, so the readout and the
+                chart cannot disagree about which way the water is going. */}
+            <span className={`forcing-arrow ${swatch ?? ""}`} style={{ transform: `rotate(${bearing}deg)` }} aria-hidden="true">
+              ↑
+            </span>
+            <span className="mono">{Math.round(bearing)}°</span>
           </span>
-          <span className="mono">towards {Math.round(bearing)}&deg;</span>
-        </span>
-      )}
+        )}
+      </span>
     </div>
   );
 }

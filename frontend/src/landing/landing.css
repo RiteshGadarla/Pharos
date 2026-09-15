@@ -104,9 +104,13 @@ button {
 }
 
 .hero-brand-mark {
+  display: block;
   flex-shrink: 0;
-  color: #57cfff;
-  transform: rotate(-25deg);
+}
+
+.footer-brand-mark {
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .hero-brand-text strong {
@@ -410,10 +414,6 @@ button {
   align-items: center;
   gap: 13px;
   max-width: 40%;
-}
-
-.footer-left b svg {
-  color: #57cfff;
 }
 
 .footer-left b {

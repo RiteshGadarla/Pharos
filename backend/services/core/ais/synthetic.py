@@ -30,7 +30,7 @@ from shapely.geometry import Point, shape
 
 from services.core.ais.darkgaps import find_dark_gaps
 from services.core.ais.kinematics import sail, sample_at_times
-from services.core.ais.tracks import bearing_deg, great_circle_interpolate, haversine_km, position_at
+from services.core.ais.tracks import great_circle_interpolate, position_at
 from services.core.schemas import AISPoint, AISTrack, ShipTarget
 
 Waypoint = tuple[float, float, datetime.datetime]  # lat, lon, time
@@ -47,6 +47,10 @@ TRANSIT_SPEED_KN = 11.0
 # transit. Small deliberately, so the vessel is still over the origin
 # when the satellite passes.
 SLOW_LEG_OFFSET_DEG = 0.008
+
+CULPRIT_MMSI = "419000001"
+# The five scenario roles of PLAN.md section 10, in generation order.
+ALL_ROLES = ("culprit", "wrong_time", "dark_far", "constant_speed_close", "dark_no_radar")
 
 
 def field_peak(field_ds: xr.Dataset) -> tuple[float, float, datetime.datetime]:
@@ -156,6 +160,93 @@ def _interp_path(waypoints: list[Waypoint], ts: datetime.datetime) -> tuple[floa
     return waypoints[-1][0], waypoints[-1][1]
 
 
+# How a transponder's reports reach an analyst this far offshore. The
+# demo area is some 350 km off the Indian coast, beyond the roughly 40 nm
+# reach of terrestrial AIS receivers, so what arrives is a satellite AIS
+# feed: a Class A transponder transmits every few seconds underway, but a
+# satellite overhead collects only some of those messages, and the
+# delivered feed carries a report every few minutes at irregular
+# intervals. These are illustrative figures in the range such feeds show,
+# not fitted from a real archive (PLAN.md section 4A); they are in one
+# place so a fitted distribution can replace them.
+REPORT_INTERVAL_MIN = 5.0
+# Class A reporting slows to every three minutes at anchor or dead slow
+# and speeds up in a turn, so the delivered cadence follows the same way.
+SLOW_REPORT_FACTOR = 1.6
+FAST_REPORT_FACTOR = 0.8
+TURN_REPORT_FACTOR = 0.6
+TURNING_ROT_DEG_S = 0.03
+# Log-normal spread of each interval around its median.
+REPORT_JITTER_SIGMA = 0.35
+# Chance that any one report is lost outright (a missed satellite
+# collection, a message collision). Isolated, and always far shorter than
+# the dark gap threshold: the dark gap detector has to tell an ordinary
+# dropout from a transponder switched off, so the fixture has to contain
+# both.
+DROPOUT_PROBABILITY = 0.05
+# The cadence and the dropouts together are never allowed to open an
+# interval longer than this fraction of dark_gap_min_minutes. Only an
+# intentional drop_between creates a dark gap.
+MAX_ORDINARY_GAP_FRACTION = 0.85
+# GNSS position noise, metres, one sigma per axis.
+POSITION_NOISE_M = 8.0
+# COG is noisy at low speed, where a few metres of position error is a
+# large fraction of the distance run between fixes.
+SOG_NOISE_KN = 0.08
+
+
+def _rot_at(path: list, index: int, step_seconds: float = 20.0) -> float:
+    if index <= 0 or index >= len(path):
+        return 0.0
+    from services.core.ais.kinematics import signed_turn
+
+    return abs(signed_turn(path[index - 1][3], path[index][3])) / step_seconds
+
+
+def report_times(
+    path: list,
+    rng: np.random.Generator,
+    base_interval_min: float,
+    dark_gap_min_minutes: float,
+) -> list[datetime.datetime]:
+    """When the feed delivers a report, for a vessel sailing `path`.
+
+    Each interval is the base interval, scaled for speed and for whether
+    the vessel is turning, times log-normal jitter, capped below the
+    dark gap threshold. Isolated reports are then lost at random, but a
+    loss is refused if it would open an interval long enough to read as
+    a dark gap.
+    """
+    stamps = np.array([p[0].timestamp() for p in path])
+    t0, t_last = path[0][0], path[-1][0]
+    cap = MAX_ORDINARY_GAP_FRACTION * dark_gap_min_minutes
+
+    times = [t0]
+    t = t0
+    while t < t_last:
+        i = int(np.abs(stamps - t.timestamp()).argmin())
+        sog = path[i][4]
+        factor = SLOW_REPORT_FACTOR if sog < 3.0 else (FAST_REPORT_FACTOR if sog >= 14.0 else 1.0)
+        if _rot_at(path, i) > TURNING_ROT_DEG_S:
+            factor *= TURN_REPORT_FACTOR
+        interval = base_interval_min * factor * float(rng.lognormal(0.0, REPORT_JITTER_SIGMA))
+        interval = float(np.clip(interval, 0.5, cap * 0.6))
+        t = t + datetime.timedelta(seconds=round(interval * 60.0))
+        times.append(min(t, t_last))
+    if times[-1] != t_last:
+        times.append(t_last)
+
+    kept = [times[0]]
+    for k in range(1, len(times) - 1):
+        if rng.random() < DROPOUT_PROBABILITY:
+            gap_min = (times[k + 1] - kept[-1]).total_seconds() / 60.0
+            if gap_min < cap:
+                continue
+        kept.append(times[k])
+    kept.append(times[-1])
+    return kept
+
+
 def build_track(
     mmsi: str,
     vessel_type: str,
@@ -165,32 +256,46 @@ def build_track(
     dark_gap_min_minutes: float,
     max_speed_kn: float,
     drop_between: tuple[datetime.datetime, datetime.datetime] | None = None,
+    natural: bool = True,
 ) -> AISTrack:
-    """Builds an AISTrack by sampling pings along a piecewise
-    great-circle path through waypoints, at jittered ping_interval_min
-    intervals (natural dropout rates should come from real
-    MarineCadastre statistics, PLAN.md section 4A; jitter is a
-    placeholder for that until they're available). Optionally drops
-    pings inside drop_between to create a dark gap. Gaps are then
-    detected the same way a real reconstruction would (ais/darkgaps.py),
-    not hand-authored, so this exercises the real detection path rather
-    than asserting its own answer."""
+    """Builds an AISTrack by sailing a vessel through its waypoints and
+    sampling the reports a feed would deliver. Optionally drops pings
+    inside drop_between to create a dark gap. Gaps are then detected the
+    same way a real reconstruction would (ais/darkgaps.py), not
+    hand-authored, so this exercises the real detection path rather than
+    asserting its own answer.
+
+    With `natural` (the default) the track carries what a real feed
+    carries: steering and speed wander in the sailing itself
+    (ais/kinematics.py), an irregular reporting cadence around
+    `ping_interval_min` that follows speed and turn rate, isolated lost
+    reports shorter than the dark gap threshold, GNSS position noise,
+    COG and SOG measurement noise at AIS resolution, and a heading that
+    differs from COG by the vessel's drift angle. Every draw comes from
+    `rng`. With natural=False it is the plain fixed-cadence sampling of a
+    clean kinematic path, for callers that want no noise at all.
+    """
     # The vessel is sailed first and the transponder samples it second,
     # which is the order the real world does it in. Building the track
     # out of the pings instead is what produced 84 degree turns inside a
     # single ping interval and 10 knot speed drops between consecutive
     # reports: the interpolation honoured the waypoint schedule exactly,
     # and no hull can.
-    path = sail(waypoints, vessel_type=vessel_type)
+    # Whole seconds, as AIS timestamps are.
+    waypoints = [(lat, lon, t.replace(microsecond=0)) for lat, lon, t in waypoints]
+    path = sail(waypoints, vessel_type=vessel_type, rng=rng if natural else None)
     t0, t_last = path[0][0], path[-1][0]
 
-    timestamps = [t0]
-    t = t0
-    while t < t_last:
-        t = t + datetime.timedelta(minutes=ping_interval_min * rng.uniform(0.8, 1.2))
-        timestamps.append(min(t, t_last))
-    if timestamps[-1] != t_last:
-        timestamps.append(t_last)
+    if natural:
+        timestamps = report_times(path, rng, ping_interval_min, dark_gap_min_minutes)
+    else:
+        timestamps = [t0]
+        t = t0
+        while t < t_last:
+            t = t + datetime.timedelta(minutes=ping_interval_min * rng.uniform(0.8, 1.2))
+            timestamps.append(min(t, t_last))
+        if timestamps[-1] != t_last:
+            timestamps.append(t_last)
 
     if drop_between is not None:
         drop_start, drop_end = drop_between
@@ -202,9 +307,25 @@ def build_track(
     # turn and reports a course the vessel never steered.
     sampled = sample_at_times(path, timestamps)
 
+    # A vessel's heading differs from its course made good by the angle
+    # wind and current set it off by. Held per vessel, it is small.
+    drift_angle = float(rng.normal(0.0, 2.0)) if natural else 0.0
+
     points: list[AISPoint] = []
     for ts, (lat, lon, cog, sog) in zip(timestamps, sampled):
-        points.append(AISPoint(ts=ts, lat=lat, lon=lon, sog=round(sog, 2), cog=round(cog, 1), heading=round(cog, 1)))
+        if natural:
+            lat += float(rng.normal(0.0, POSITION_NOISE_M)) / 111_320.0
+            lon += float(rng.normal(0.0, POSITION_NOISE_M)) / (111_320.0 * max(math.cos(math.radians(lat)), 1e-6))
+            cog_sd = min(25.0, 0.8 + 4.0 / max(sog, 0.2))
+            rep_cog = (cog + float(rng.normal(0.0, cog_sd))) % 360.0
+            rep_sog = max(0.0, sog + float(rng.normal(0.0, SOG_NOISE_KN)))
+            heading = round((cog + drift_angle + float(rng.normal(0.0, 0.5))) % 360.0)
+            points.append(AISPoint(
+                ts=ts, lat=round(lat, 6), lon=round(lon, 6),
+                sog=round(rep_sog, 1), cog=round(rep_cog, 1), heading=float(heading % 360),
+            ))
+        else:
+            points.append(AISPoint(ts=ts, lat=lat, lon=lon, sog=round(sog, 2), cog=round(cog, 1), heading=round(cog, 1)))
 
     dark_gaps = find_dark_gaps(points, dark_gap_min_minutes, max_speed_kn)
     return AISTrack(mmsi=mmsi, vessel_type=vessel_type, points=points, dark_gaps=dark_gaps)
@@ -257,6 +378,10 @@ def generate_demo_scenario(
     include_culprit_dark_gap: bool = True,
     origin_lag_hours: float | None = None,
     acquired_at: datetime.datetime | None = None,
+    roles: list[str] | tuple[str, ...] | None = None,
+    culprit_dark_gap_minutes: float = 50.0,
+    approach_bearing_deg: float = 60.0,
+    report_interval_min: float = REPORT_INTERVAL_MIN,
 ) -> list[AISTrack]:
     """Builds the culprit plus four hard negatives from PLAN.md section
     10, positioned relative to the origin field's peak so the scoring
@@ -294,10 +419,28 @@ def generate_demo_scenario(
     is consistent with what the characterisation measured rather than
     with a number chosen to make the demo work.
 
-    Left as None the old global-argmax behaviour applies, which is what
-    the validation harness's synthetic incidents and the contract tests
-    still use.
+    Left as None the origin is the field's peak at the acquisition
+    instant, which is what the validation harness's synthetic incidents
+    and the contract tests still use.
+
+    The case studies (config/cases.yaml) vary the skeleton without
+    changing what any role means:
+
+    - roles picks which of the five are present. All five by default. A
+      case whose premise is that no broadcasting vessel passed the origin
+      (DARK_CONFIRMED) leaves out the roles that pass it at the right
+      time, rather than keeping them and hoping they score low.
+    - culprit_dark_gap_minutes is PLAN.md section 10's "configurable dark
+      period". include_culprit_dark_gap=False still means no gap at all.
+    - approach_bearing_deg is the culprit's lane heading, which a case
+      sets to match the lane it sails and the streak it leaves.
+    - report_interval_min is the median AIS report interval, see
+      REPORT_INTERVAL_MIN.
     """
+    roles = set(ALL_ROLES if roles is None else roles)
+    unknown_roles = roles - set(ALL_ROLES)
+    if unknown_roles:
+        raise ValueError(f"unknown scenario role(s): {sorted(unknown_roles)}, choose from {ALL_ROLES}")
     rng = np.random.default_rng(seed)
     dark_gap_min = ais_config["dark_gap_min_minutes"]
     max_speed_kn = ais_config["max_plausible_speed_kn"]
@@ -308,7 +451,16 @@ def generate_demo_scenario(
         origin_time = acquired_at - datetime.timedelta(hours=float(origin_lag_hours))
         peak_lat, peak_lon, peak_time = field_peak_at(field_ds, origin_time)
     else:
-        peak_lat, peak_lon, peak_time = field_peak(field_ds)
+        # No lag: the origin is the acquisition instant. This used to be
+        # the global argmax, on the reasoning that the field is always
+        # most concentrated at acquisition. With a current field that has
+        # real strain in it that stopped being reliable: over a short
+        # horizon the per-slice peak density is nearly flat, and the
+        # argmax could land an hour early on noise, which moved the
+        # culprit's dark gap off the acquisition instant and silently
+        # switched F8 off. Taking the acquisition slice explicitly states
+        # what the global argmax was only ever standing in for.
+        peak_lat, peak_lon, peak_time = field_peak_at(field_ds, field_time_bounds(field_ds)[1])
     t_min, t_max = field_time_bounds(field_ds)
 
     lat_span = float(field_ds["lat"].values.max() - field_ds["lat"].values.min())
@@ -355,7 +507,6 @@ def generate_demo_scenario(
     # discharge and the departure are one straight line, and the only
     # course change is a gentle one well afterwards, which is what F5 is
     # meant to find.
-    approach_bearing_deg = 60.0
     brg = math.radians(approach_bearing_deg)
     lat_step = math.cos(brg)
     lon_step = math.sin(brg) / max(math.cos(math.radians(peak_lat)), 1e-6)
@@ -424,38 +575,42 @@ def generate_demo_scenario(
     if tail is not None:
         culprit_waypoints = extend_to(culprit_waypoints, tail)
 
+    half_culprit_gap = datetime.timedelta(minutes=float(culprit_dark_gap_minutes) / 2.0)
     culprit_drop = (
-        (peak_time - datetime.timedelta(minutes=25), peak_time + datetime.timedelta(minutes=25))
-        if include_culprit_dark_gap
+        (peak_time - half_culprit_gap, peak_time + half_culprit_gap)
+        if include_culprit_dark_gap and culprit_dark_gap_minutes > 0
         else None
     )
-    tracks.append(
-        build_track(
-            "419000001", "tanker", culprit_waypoints, ping_interval_min=8, rng=rng,
-            dark_gap_min_minutes=dark_gap_min, max_speed_kn=max_speed_kn, drop_between=culprit_drop,
+    if "culprit" in roles:
+        tracks.append(
+            build_track(
+                CULPRIT_MMSI, "tanker", culprit_waypoints, ping_interval_min=report_interval_min, rng=rng,
+                dark_gap_min_minutes=dark_gap_min, max_speed_kn=max_speed_kn, drop_between=culprit_drop,
+            )
         )
-    )
 
     wrong_time = t_min - datetime.timedelta(hours=12)
     wrong_time_waypoints = transit(peak_lat, peak_lon, 45.0, offset, wrong_time, leg)
-    tracks.append(
-        build_track(
-            "419000002", "cargo", wrong_time_waypoints, ping_interval_min=10, rng=rng,
-            dark_gap_min_minutes=dark_gap_min, max_speed_kn=max_speed_kn,
+    if "wrong_time" in roles:
+        tracks.append(
+            build_track(
+                "419000002", "cargo", wrong_time_waypoints, ping_interval_min=report_interval_min, rng=rng,
+                dark_gap_min_minutes=dark_gap_min, max_speed_kn=max_speed_kn,
+            )
         )
-    )
 
     far_lat, far_lon = peak_lat + far_offset, peak_lon + far_offset
     far_waypoints = transit(far_lat, far_lon, 45.0, offset, peak_time, leg)
     if tail is not None:
         far_waypoints = extend_to(far_waypoints, tail)
     far_drop = (peak_time - datetime.timedelta(minutes=25), peak_time + datetime.timedelta(minutes=25))
-    tracks.append(
-        build_track(
-            "419000003", "cargo", far_waypoints, ping_interval_min=8, rng=rng,
-            dark_gap_min_minutes=dark_gap_min, max_speed_kn=max_speed_kn, drop_between=far_drop,
+    if "dark_far" in roles:
+        tracks.append(
+            build_track(
+                "419000003", "cargo", far_waypoints, ping_interval_min=report_interval_min, rng=rng,
+                dark_gap_min_minutes=dark_gap_min, max_speed_kn=max_speed_kn, drop_between=far_drop,
+            )
         )
-    )
 
     # Passes through the field's mass at the peak time, like the culprit,
     # but at steady transit speed and without ever going dark. This is
@@ -469,12 +624,13 @@ def generate_demo_scenario(
     )
     if tail is not None:
         constant_speed_waypoints = extend_to(constant_speed_waypoints, tail)
-    tracks.append(
-        build_track(
-            "419000004", "fishing", constant_speed_waypoints, ping_interval_min=8, rng=rng,
-            dark_gap_min_minutes=dark_gap_min, max_speed_kn=max_speed_kn,
+    if "constant_speed_close" in roles:
+        tracks.append(
+            build_track(
+                "419000004", "fishing", constant_speed_waypoints, ping_interval_min=report_interval_min, rng=rng,
+                dark_gap_min_minutes=dark_gap_min, max_speed_kn=max_speed_kn,
+            )
         )
-    )
 
     # Goes dark over the field, like the culprit, but its dead-reckoned
     # envelope does not contain the unmatched radar target, so F8 stays
@@ -508,13 +664,14 @@ def generate_demo_scenario(
         dark_no_radar_waypoints = extend_to(dark_no_radar_waypoints, tail)
     half_gap = datetime.timedelta(minutes=short_gap_minutes / 2.0)
     dark_no_radar_drop = (early_gap_centre - half_gap, early_gap_centre + half_gap)
-    tracks.append(
-        build_track(
-            "419000005", "cargo", dark_no_radar_waypoints, ping_interval_min=8, rng=rng,
-            dark_gap_min_minutes=dark_gap_min, max_speed_kn=max_speed_kn,
-            drop_between=dark_no_radar_drop,
+    if "dark_no_radar" in roles:
+        tracks.append(
+            build_track(
+                "419000005", "cargo", dark_no_radar_waypoints, ping_interval_min=report_interval_min, rng=rng,
+                dark_gap_min_minutes=dark_gap_min, max_speed_kn=max_speed_kn,
+                drop_between=dark_no_radar_drop,
+            )
         )
-    )
 
     return tracks
 
@@ -523,7 +680,8 @@ def inject_ship_targets(
     tracks: list[AISTrack],
     field_ds: xr.Dataset,
     acquired_at: datetime.datetime,
-    culprit_mmsi: str = "419000001",
+    culprit_mmsi: str | None = CULPRIT_MMSI,
+    scene_id: str = "DRISHTA-DEMO-0001",
 ) -> list[ShipTarget]:
     """Synthetic ShipTarget records for the demo scene. See PLAN.md
     section 11.
@@ -549,7 +707,7 @@ def inject_ship_targets(
         targets.append(
             ShipTarget(
                 target_id=f"SYNTH-ship-{len(targets):03d}",
-                scene_id="DRISHTA-DEMO-0001",
+                scene_id=scene_id,
                 centroid=(lon, lat),
                 pixel_area=int(40 + 20 * (track.vessel_type == "tanker")),
                 mean_backscatter_db=-4.5,
@@ -583,7 +741,7 @@ def inject_ship_targets(
         targets.append(
             ShipTarget(
                 target_id="SYNTH-ship-unmatched",
-                scene_id="DRISHTA-DEMO-0001",
+                scene_id=scene_id,
                 centroid=(float(point.x), float(point.y)),
                 pixel_area=64,
                 mean_backscatter_db=-3.8,
@@ -629,8 +787,298 @@ def generate_decoy_vessels(field_ds: xr.Dataset, ais_config: dict, seed: int, n_
         vessel_type = DECOY_VESSEL_TYPES[int(rng.integers(0, len(DECOY_VESSEL_TYPES)))]
         tracks.append(
             build_track(
-                f"419000{100 + i:03d}", vessel_type, waypoints, ping_interval_min=10, rng=rng,
+                f"419000{100 + i:03d}", vessel_type, waypoints, ping_interval_min=REPORT_INTERVAL_MIN, rng=rng,
                 dark_gap_min_minutes=dark_gap_min, max_speed_kn=max_speed_kn,
             )
         )
     return tracks
+
+
+# ---------------------------------------------------------------------------
+# Background traffic
+#
+# The five scenario vessels are the incident. Around them a real AIS
+# picture of the Eastern Arabian Sea has ordinary traffic: laden tankers
+# on the Gulf of Oman to south India and Malacca route, container ships
+# and bulkers between the Gulf of Aden and Mumbai, a passenger vessel, a
+# tug, and fishing craft working grounds off the lanes. None of them has
+# anything to do with the slick, and that is exactly why they matter: an
+# engine that only ever sees five hand-placed vessels has never had to
+# separate a culprit from a crowd.
+#
+# Everything below is illustrative. The lane bearings are the great
+# circle headings of the named routes where they cross this part of the
+# sea; they are not fitted AIS density lanes, and the type mix, speeds
+# and flag distribution are placeholders in realistic ranges pending real
+# MarineCadastre-style statistics (PLAN.md section 4A). Every draw is
+# seeded.
+
+# Maritime identification digits plausible for traffic in this sea: the
+# open registries that dominate deep-sea tonnage, regional flags, and the
+# Indian flag. The first three digits of an MMSI.
+FLAG_MIDS: dict[str, list[str]] = {
+    "tanker": ["636", "538", "370", "371", "256", "477", "563", "419", "470", "241"],
+    "cargo": ["477", "563", "636", "538", "353", "255", "212", "419", "413", "566"],
+    "passenger": ["311", "248", "419"],
+    "tug": ["419", "470", "461"],
+    "fishing": ["419", "417", "463"],
+}
+
+# Speed through the water in knots, (mean, standard deviation), by the
+# service a vessel is on rather than only its AIS type: a container ship
+# and a bulker are both "cargo" and do not sail at the same speed.
+SERVICE_SPEEDS_KN: dict[str, tuple[str, float, float]] = {
+    "tanker": ("tanker", 12.5, 1.0),
+    "container": ("cargo", 16.5, 1.5),
+    "bulk": ("cargo", 12.0, 1.0),
+    "general_cargo": ("cargo", 10.5, 1.0),
+    "passenger": ("passenger", 18.0, 1.0),
+    "tug": ("tug", 8.0, 0.8),
+    "fishing_trawl": ("fishing", 3.5, 0.5),
+}
+
+DEFAULT_LANES: list[dict] = [
+    {
+        "name": "Gulf of Oman to south India and Malacca",
+        "bearing_deg": 135.0,
+        "offset_km": 18.0,
+        "share": 0.5,
+        "services": {"tanker": 0.6, "container": 0.2, "bulk": 0.2},
+    },
+    {
+        "name": "Gulf of Aden to Mumbai and JNPT",
+        "bearing_deg": 64.0,
+        "offset_km": -22.0,
+        "share": 0.5,
+        "services": {"container": 0.45, "bulk": 0.2, "tanker": 0.25, "passenger": 0.1},
+    },
+]
+
+
+def _field_centre(field_ds: xr.Dataset) -> tuple[float, float]:
+    """Mass-weighted centre of the whole field. Orientation only: it is
+    where the background lanes are laid out from, never a scoring input."""
+    prob = field_ds["probability"].values.sum(axis=0)
+    total = prob.sum()
+    lats, lons = field_ds["lat"].values, field_ds["lon"].values
+    if total <= 0:
+        return float(lats.mean()), float(lons.mean())
+    return float((prob.sum(axis=1) * lats).sum() / total), float((prob.sum(axis=0) * lons).sum() / total)
+
+
+def _offset_point(lat0: float, lon0: float, east_km: float, north_km: float) -> tuple[float, float]:
+    return (
+        lat0 + north_km / KM_PER_DEG,
+        lon0 + east_km / (KM_PER_DEG * max(math.cos(math.radians(lat0)), 1e-6)),
+    )
+
+
+def _unit(bearing: float) -> tuple[float, float]:
+    b = math.radians(bearing)
+    return math.sin(b), math.cos(b)
+
+
+def _mmsi(rng: np.random.Generator, vessel_type: str, taken: set[str]) -> str:
+    mids = FLAG_MIDS.get(vessel_type, FLAG_MIDS["cargo"])
+    while True:
+        candidate = f"{mids[int(rng.integers(0, len(mids)))]}{int(rng.integers(100000, 1000000)):06d}"
+        # 4190000xx is reserved for the scenario roles.
+        if candidate not in taken and not candidate.startswith("419000"):
+            taken.add(candidate)
+            return candidate
+
+
+def _pick(rng: np.random.Generator, weights: dict[str, float]) -> str:
+    keys = sorted(weights)
+    w = np.array([weights[k] for k in keys], dtype=float)
+    return keys[int(rng.choice(len(keys), p=w / w.sum()))]
+
+
+def _lane_transit(
+    rng: np.random.Generator,
+    centre: tuple[float, float],
+    lane: dict,
+    crossing_time: datetime.datetime,
+    speed_kn: float,
+    half_length_km: float,
+) -> list[Waypoint]:
+    """A passage along a lane: keeps to its own side of the centre line
+    with some cross-track spread, and sometimes makes a small alteration
+    part way, the way a watchkeeper opens the distance on another ship."""
+    forward = bool(rng.random() < 0.5)
+    bearing = float(lane["bearing_deg"]) + (0.0 if forward else 180.0)
+    # Starboard side of the lane for this direction, measured in the
+    # lane's own forward frame.
+    side = 1.0 if forward else -1.0
+    cross = float(lane.get("offset_km", 0.0)) + side * float(rng.normal(2.5, 1.2))
+    ae, an = _unit(float(lane["bearing_deg"]))
+    re_, rn = an, -ae  # right of the lane's forward bearing
+    de, dn = _unit(bearing)
+    speed_kmh = speed_kn * KM_PER_NM
+
+    def at(along_km: float, lateral_km: float) -> tuple[float, float]:
+        east = cross * re_ + along_km * de + lateral_km * re_
+        north = cross * rn + along_km * dn + lateral_km * rn
+        return _offset_point(centre[0], centre[1], east, north)
+
+    stations = [-half_length_km]
+    if rng.random() < 0.4:
+        stations.append(float(rng.uniform(-0.5, 0.5)) * half_length_km)
+    stations.append(half_length_km)
+    waypoints: list[Waypoint] = []
+    for k, s_km in enumerate(stations):
+        lateral = 0.0 if k in (0, len(stations) - 1) else float(rng.normal(0.0, 1.5))
+        lat, lon = at(s_km, lateral)
+        waypoints.append((lat, lon, crossing_time + datetime.timedelta(hours=s_km / speed_kmh)))
+    return waypoints
+
+
+def _fishing_pattern(
+    rng: np.random.Generator,
+    ground: tuple[float, float],
+    radius_km: float,
+    start: datetime.datetime,
+    speed_kn: float,
+    n_legs: int,
+) -> list[Waypoint]:
+    """Trawling: slow legs of a few kilometres with large, irregular
+    course changes, staying on the ground. A fishing vessel's track is a
+    tangle, not a line, and its slow speed is its normal speed."""
+    lat, lon = _offset_point(ground[0], ground[1], *(rng.normal(0.0, radius_km / 2.0, 2)))
+    t = start
+    heading = float(rng.uniform(0.0, 360.0))
+    waypoints: list[Waypoint] = [(lat, lon, t)]
+    for _ in range(n_legs):
+        heading = (heading + float(rng.choice([-1.0, 1.0])) * float(rng.uniform(40.0, 150.0))) % 360.0
+        # Turn back towards the ground centre when drifting off it.
+        east_off = (lon - ground[1]) * KM_PER_DEG * math.cos(math.radians(lat))
+        north_off = (lat - ground[0]) * KM_PER_DEG
+        if math.hypot(east_off, north_off) > radius_km:
+            heading = (math.degrees(math.atan2(-east_off, -north_off)) + float(rng.normal(0.0, 20.0))) % 360.0
+        leg_km = float(rng.uniform(2.0, 6.0))
+        de, dn = _unit(heading)
+        lat, lon = _offset_point(lat, lon, leg_km * de, leg_km * dn)
+        t = t + datetime.timedelta(hours=leg_km / (speed_kn * KM_PER_NM))
+        waypoints.append((lat, lon, t))
+    return waypoints
+
+
+def generate_background_traffic(
+    field_ds: xr.Dataset,
+    ais_config: dict,
+    seed: int,
+    n_lane_vessels: int = 8,
+    lanes: list[dict] | None = None,
+    fishing_grounds: list[dict] | None = None,
+    n_tugs: int = 1,
+    region_half_km: float = 80.0,
+    report_interval_min: float = REPORT_INTERVAL_MIN,
+) -> list[AISTrack]:
+    """Ordinary traffic around the incident, laid out from the origin
+    field's centre.
+
+    lanes: list of {name, bearing_deg, offset_km, share, services}. The
+      offset is the lane centre line's distance to the right of its
+      bearing from the field centre, so a case decides whether the busy
+      lane runs through the origin area or past it.
+    fishing_grounds: list of {east_km, north_km, radius_km, n}.
+    n_tugs: off-lane transits at tug speed on arbitrary headings.
+
+    Passage times are spread across the field's window with jitter, so
+    some vessels cross the origin area while the oil could have been
+    released, most do not, and some are gone before the window opens.
+    """
+    rng = np.random.default_rng(seed)
+    dark_gap_min = ais_config["dark_gap_min_minutes"]
+    max_speed_kn = ais_config["max_plausible_speed_kn"]
+    lanes = DEFAULT_LANES if lanes is None else lanes
+    fishing_grounds = fishing_grounds or []
+    centre = _field_centre(field_ds)
+    t_min, t_max = field_time_bounds(field_ds)
+    window_h = (t_max - t_min).total_seconds() / 3600.0
+
+    taken: set[str] = set()
+    tracks: list[AISTrack] = []
+
+    if lanes and n_lane_vessels > 0:
+        shares = np.array([float(lane.get("share", 1.0)) for lane in lanes])
+        # Stratified passage times: evenly spread over the window plus a
+        # few hours either side, jittered, so traffic is continuous rather
+        # than bunched by chance.
+        span_start = -6.0
+        span_h = window_h + 10.0
+        slots = (np.arange(n_lane_vessels) + rng.uniform(0.1, 0.9, n_lane_vessels)) / n_lane_vessels
+        rng.shuffle(slots)
+        for i in range(n_lane_vessels):
+            lane = lanes[int(rng.choice(len(lanes), p=shares / shares.sum()))]
+            service = _pick(rng, lane.get("services", {"cargo": 1.0}))
+            vessel_type, mean_kn, sd_kn = SERVICE_SPEEDS_KN[service]
+            speed_kn = float(np.clip(rng.normal(mean_kn, sd_kn), mean_kn - 2.5 * sd_kn, mean_kn + 2.5 * sd_kn))
+            crossing = t_min + datetime.timedelta(hours=span_start + float(slots[i]) * span_h)
+            waypoints = _lane_transit(rng, centre, lane, crossing, speed_kn, region_half_km)
+            tracks.append(build_track(
+                _mmsi(rng, vessel_type, taken), vessel_type, waypoints,
+                ping_interval_min=report_interval_min, rng=rng,
+                dark_gap_min_minutes=dark_gap_min, max_speed_kn=max_speed_kn,
+            ))
+
+    for ground in fishing_grounds:
+        g_lat, g_lon = _offset_point(centre[0], centre[1], float(ground.get("east_km", 0.0)), float(ground.get("north_km", 0.0)))
+        for _ in range(int(ground.get("n", 1))):
+            _, mean_kn, sd_kn = SERVICE_SPEEDS_KN["fishing_trawl"]
+            start = t_min + datetime.timedelta(hours=float(rng.uniform(-4.0, max(window_h - 10.0, -3.0))))
+            waypoints = _fishing_pattern(
+                rng, (g_lat, g_lon), float(ground.get("radius_km", 6.0)), start,
+                max(1.5, float(rng.normal(mean_kn, sd_kn))), int(rng.integers(8, 16)),
+            )
+            tracks.append(build_track(
+                _mmsi(rng, "fishing", taken), "fishing", waypoints,
+                ping_interval_min=report_interval_min, rng=rng,
+                dark_gap_min_minutes=dark_gap_min, max_speed_kn=max_speed_kn,
+            ))
+
+    for _ in range(n_tugs):
+        # Off every lane: a tug on passage to or from the offshore fields
+        # to the northeast, on its own heading.
+        _, mean_kn, sd_kn = SERVICE_SPEEDS_KN["tug"]
+        speed_kn = float(rng.normal(mean_kn, sd_kn))
+        bearing = float(rng.uniform(20.0, 60.0)) + (180.0 if rng.random() < 0.5 else 0.0)
+        lane = {"bearing_deg": bearing, "offset_km": float(rng.uniform(-35.0, 35.0))}
+        crossing = t_min + datetime.timedelta(hours=float(rng.uniform(0.0, window_h)))
+        waypoints = _lane_transit(rng, centre, lane, crossing, speed_kn, region_half_km * 0.6)
+        tracks.append(build_track(
+            _mmsi(rng, "tug", taken), "tug", waypoints,
+            ping_interval_min=report_interval_min, rng=rng,
+            dark_gap_min_minutes=dark_gap_min, max_speed_kn=max_speed_kn,
+        ))
+
+    return tracks
+
+
+def dark_hull_target(
+    field_ds: xr.Dataset,
+    origin_time: datetime.datetime,
+    scene_id: str,
+    offset_m: tuple[float, float] = (0.0, 0.0),
+    pixel_area: int = 72,
+) -> ShipTarget:
+    """The radar return of a vessel with no AIS at all, for a scenario
+    whose premise is that the source never broadcast.
+
+    Placed at the origin field's highest-mass cell at the scenario's
+    origin time, offset by `offset_m` (east, north): the synthetic ground
+    truth is a vessel that released oil there and was still loitering
+    nearby, transponder off, when the satellite passed. Nothing about the
+    placement feeds the scoring engine; the cross check still has to
+    find that no broadcasting vessel explains the hull, and the verdict
+    still has to find that nobody broadcasting is a plausible source.
+    """
+    lat, lon, _ = field_peak_at(field_ds, origin_time)
+    lat, lon = _offset_point(lat, lon, offset_m[0] / 1000.0, offset_m[1] / 1000.0)
+    return ShipTarget(
+        target_id="SYNTH-ship-unmatched",
+        scene_id=scene_id,
+        centroid=(float(lon), float(lat)),
+        pixel_area=int(pixel_area),
+        mean_backscatter_db=-3.8,
+    )

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import Disclosure from "./Disclosure";
 import { FACTOR_LABELS, type DemoBundle } from "../types";
 
 interface Props {
@@ -29,6 +31,11 @@ interface Props {
 // The answer to "this is just proximity" lives in the baselines below
 // instead, and it is stronger for being measured: nearest-to-centroid
 // collapses the field to a point and names a different vessel.
+//
+// The nine steps are a single row of numbered stops rather than a list,
+// so the step being shown, its question and its bars get the space. Each
+// stop still names its step on hover, and the result of each baseline
+// stays visible while what it assumes sits one click down.
 export default function CaseBuildPanel({ bundle, onFocusVessel }: Props) {
   const build = bundle.case_build;
   const [index, setIndex] = useState<number>(() => (build ? build.steps.length - 1 : 0));
@@ -38,15 +45,29 @@ export default function CaseBuildPanel({ bundle, onFocusVessel }: Props) {
   const step = build.steps[Math.min(index, build.steps.length - 1)];
   const maxAbs = Math.max(1e-6, ...step.ranking.map((r) => Math.abs(r.total)));
   const settlesAt = build.steps.find((s) => s.key === build.stabilises_at_step);
+  const settlesOrdinal = settlesAt ? build.steps.indexOf(settlesAt) + 1 : null;
   const robust = build.decisive_factors.length === 0;
 
   return (
     <section className="case-build">
       <div className="case-head">
-        <h2 className="evidence-heading">How the case was built</h2>
-        <span className="case-counter mono">
-          {index + 1}/{build.steps.length}
-        </span>
+        <h3 className="section-title">How the case was built</h3>
+        <div className="case-nav">
+          <button onClick={() => setIndex((i) => Math.max(0, i - 1))} disabled={index === 0} aria-label="Previous evidence">
+            <ChevronLeft size={18} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+          <span className="case-counter mono">
+            {index + 1}/{build.steps.length}
+          </span>
+          <button
+            onClick={() => setIndex((i) => Math.min(build.steps.length - 1, i + 1))}
+            disabled={index === build.steps.length - 1}
+            aria-label="Add next evidence"
+            title="Add next evidence"
+          >
+            <ChevronRight size={18} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       {/* Each step is directly clickable, not just next and back: during
@@ -55,31 +76,33 @@ export default function CaseBuildPanel({ bundle, onFocusVessel }: Props) {
         {build.steps.map((s, i) => (
           <li key={s.key}>
             <button
-              className={`case-tick ${i === index ? "current" : i < index ? "done" : ""} ${
-                s.lead_changed ? "flips" : ""
+              className={`case-stop ${i === index ? "current" : i < index ? "done" : ""}${s.lead_changed ? " flips" : ""}${
+                s.key === build.stabilises_at_step ? " settles" : ""
               }`}
               onClick={() => setIndex(i)}
-              title={`${s.label}: ${s.question}`}
+              title={`${i + 1}. ${s.label}: ${s.question}${s.lead_changed ? " (lead changes)" : ""}`}
+              aria-label={`${i + 1}. ${s.label}`}
               aria-current={i === index ? "step" : undefined}
             >
-              <span className="case-tick-dot" />
-              <span className="case-tick-label">{s.label}</span>
-              {s.lead_changed && <span className="case-tick-flip">lead changes</span>}
+              <span className="mono">{i + 1}</span>
             </button>
           </li>
         ))}
       </ol>
 
       <div className="case-step">
+        <span className="case-step-label">
+          {step.label}
+          {step.lead_changed && <span className="pill flip">Lead changes</span>}
+        </span>
         <p className="case-question">{step.question}</p>
         <p className="case-note">{step.note}</p>
 
         {step.factors_added.length > 0 && (
           <p className="case-factors">
-            Adds:{" "}
             {step.factors_added.map((f) => (
               <span className="case-factor-chip mono" key={f}>
-                {FACTOR_LABELS[f] ?? f}
+                + {FACTOR_LABELS[f] ?? f}
               </span>
             ))}
           </p>
@@ -117,47 +140,44 @@ export default function CaseBuildPanel({ bundle, onFocusVessel }: Props) {
         )}
       </div>
 
-      <div className="case-nav">
-        <button onClick={() => setIndex((i) => Math.max(0, i - 1))} disabled={index === 0}>
-          Back
-        </button>
-        <button
-          onClick={() => setIndex((i) => Math.min(build.steps.length - 1, i + 1))}
-          disabled={index === build.steps.length - 1}
-        >
-          Add next evidence
-        </button>
-      </div>
-
       {/* The two claims worth holding the system to. Both are computed,
-          and the second can come out against us. */}
+          and the second can come out against us, in which case it is
+          shown in the same place at the same size. */}
       <div className={`case-robustness ${robust ? "robust" : "fragile"}`}>
-        <div className="case-robust-row">
-          <span className="case-robust-label">Settles at</span>
-          <span className="case-robust-value">{settlesAt ? settlesAt.label : "never"}</span>
+        <div className="case-robust-grid">
+          <div className="case-robust-cell">
+            <span className="stat-label">Settles at</span>
+            <span className="case-robust-value">
+              {settlesAt ? (
+                <>
+                  <span className="mono">{settlesOrdinal}</span> {settlesAt.label}
+                </>
+              ) : (
+                "never"
+              )}
+            </span>
+          </div>
+          <div className="case-robust-cell">
+            <span className="stat-label">Leave one out</span>
+            <span className="case-robust-value">
+              {robust ? "No single factor decides it" : build.decisive_factors.map((f) => FACTOR_LABELS[f] ?? f).join(", ")}
+            </span>
+          </div>
         </div>
-        <div className="case-robust-row">
-          <span className="case-robust-label">Leave one out</span>
-          <span className="case-robust-value">
-            {robust ? "no single factor decides it" : build.decisive_factors.join(", ")}
-          </span>
-        </div>
-        <p className="case-statement">{build.statement}</p>
+        <Disclosure label="What this means">
+          <p>{build.statement}</p>
+        </Disclosure>
       </div>
 
       {build.baselines && build.baselines.length > 0 && (
         <div className="case-baselines">
-          <h3 className="case-sub">What a simpler system would have said</h3>
-          <p className="case-note">
-            Each of these is a real approach someone might take, run on this same case. The point is not
-            that they are naive, it is what each one has to assume.
-          </p>
+          <h3 className="section-title">What a simpler system would have said</h3>
           {build.baselines.map((b) => (
             <div className={`baseline-row ${b.agrees ? "agrees" : "differs"}`} key={b.key}>
               <div className="baseline-head">
                 <span className="baseline-label">{b.label}</span>
-                <span className={`baseline-verdict ${b.agrees ? "agrees" : "differs"}`}>
-                  {b.agrees ? "same answer" : "different answer"}
+                <span className={`pill baseline-verdict ${b.agrees ? "agrees" : "differs"}`}>
+                  {b.agrees ? "Same answer" : "Different answer"}
                 </span>
               </div>
               <p className="baseline-detail mono">{b.detail}</p>
@@ -165,22 +185,31 @@ export default function CaseBuildPanel({ bundle, onFocusVessel }: Props) {
                   and neither is a technicality. A baseline can agree by
                   a hair, or it can agree while its winner is 64 km from
                   the slick. Both are proximity landing on the right
-                  answer rather than finding it. */}
+                  answer rather than finding it, so the qualifier stays
+                  beside the "same answer" it qualifies. */}
               {b.agrees && b.separation_km !== null && b.separation_km < 5 && (
                 <p className="baseline-caveat">
-                  It separates first from second by only {b.separation_km} km, so it reaches the same
-                  answer without really distinguishing between them.
+                  It separates first from second by only {b.separation_km} km, so it reaches the same answer without
+                  really distinguishing between them.
                 </p>
               )}
               {b.agrees && b.winner_km !== null && b.winner_km > 20 && (
                 <p className="baseline-caveat">
-                  Its winner was {b.winner_km} km from the slick. Nothing was near the slick, so this
-                  agrees with us without proximity doing any work.
+                  Its winner was {b.winner_km} km from the slick. Nothing was near the slick, so this agrees with us
+                  without proximity doing any work.
                 </p>
               )}
-              <p className="baseline-assumes">Assumes: {b.assumes}</p>
+              <Disclosure label="What it assumes">
+                <p>{b.assumes}</p>
+              </Disclosure>
             </div>
           ))}
+          <Disclosure label="Why compare against these">
+            <p>
+              Each of these is a real approach someone might take, run on this same case. The point is not that they are
+              naive, it is what each one has to assume.
+            </p>
+          </Disclosure>
         </div>
       )}
     </section>

@@ -24,6 +24,10 @@ interface Props {
 // is the same dashed line on the chart. Rows appear only when the layer
 // they describe is actually switched on: a legend describing something
 // that is not on screen is worse than no legend.
+//
+// Collapsed to just the name of each mark, which is what survives a
+// projector. What the mark means is one click away under Explain, and on
+// hover.
 
 // The heading names the question the stage is answering, so the legend
 // reads as part of the argument rather than as a key bolted to the side
@@ -159,7 +163,7 @@ function rowsFor(t: LayerToggles, hasForecast: boolean, hasForcing: boolean): Ro
 }
 
 function SampleMark({ sample, color }: { sample: Sample; color: string }) {
-  const common = { width: 26, height: 14 };
+  const common = { width: 30, height: 16, viewBox: "0 0 26 14" };
   switch (sample) {
     case "solid":
       return (
@@ -222,25 +226,39 @@ function SampleMark({ sample, color }: { sample: Sample; color: string }) {
 
 export default function MapLegend({ stage, toggles, hasForecast, hasForcing }: Props) {
   const [open, setOpen] = useState(true);
+  const [explain, setExplain] = useState(false);
   const rows = rowsFor(toggles, hasForecast, hasForcing);
   if (rows.length === 0) return null;
 
   return (
-    <div className={`map-legend ${open ? "" : "collapsed"}`}>
-      <button className="map-legend-toggle" onClick={() => setOpen((o) => !o)}>
-        <span>{HEADINGS[stage]}</span>
-        <span className="map-legend-chevron">{open ? "–" : "+"}</span>
-      </button>
+    <div className={`map-legend map-card${open ? "" : " collapsed"}${explain ? " explaining" : ""}`}>
+      <div className="map-legend-head">
+        <button className="map-legend-title" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          {HEADINGS[stage]}
+          <span className="map-legend-chevron" aria-hidden="true">
+            {open ? "−" : "+"}
+          </span>
+        </button>
+        {open && (
+          <button
+            className={`map-legend-explain${explain ? " active" : ""}`}
+            onClick={() => setExplain((e) => !e)}
+            aria-pressed={explain}
+          >
+            {explain ? "Shorter" : "Explain"}
+          </button>
+        )}
+      </div>
       {open && (
         <div className="map-legend-rows">
           {rows.map((r) => (
-            <div className="map-legend-row" key={r.label}>
+            <div className="map-legend-row" key={r.label} title={r.meaning}>
               <span className="map-legend-sample">
                 <SampleMark sample={r.sample} color={r.color} />
               </span>
               <span className="map-legend-text">
                 <span className="map-legend-label">{r.label}</span>
-                <span className="map-legend-meaning">{r.meaning}</span>
+                {explain && <span className="map-legend-meaning">{r.meaning}</span>}
               </span>
             </div>
           ))}

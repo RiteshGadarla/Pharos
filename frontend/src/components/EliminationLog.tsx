@@ -2,11 +2,14 @@ import type { DemoBundle } from "../types";
 
 interface Props {
   bundle: DemoBundle;
+  onFocusVessel?: (mmsi: string) => void;
 }
 
 // Deliberately unglamorous, PLAN.md section 16: "Its job is to look
-// like a record, not a visualisation."
-export default function EliminationLog({ bundle }: Props) {
+// like a record, not a visualisation." One line per vessel: who, the
+// rule that cleared it, and the reason written as a sentence an
+// investigator would accept.
+export default function EliminationLog({ bundle, onFocusVessel }: Props) {
   const vesselByMmsi = new Map(bundle.vessels.map((v) => [v.mmsi, v]));
 
   if (bundle.eliminations.length === 0) {
@@ -17,19 +20,26 @@ export default function EliminationLog({ bundle }: Props) {
     <table className="elimination-table">
       <thead>
         <tr>
-          <th>MMSI</th>
-          <th>Type</th>
-          <th>Rule</th>
-          <th>Reason</th>
+          <th>Vessel</th>
+          <th>Rule and reason</th>
         </tr>
       </thead>
       <tbody>
         {bundle.eliminations.map((e) => (
-          <tr key={e.mmsi}>
-            <td className="mono">{e.mmsi}</td>
-            <td>{vesselByMmsi.get(e.mmsi)?.vessel_type ?? ""}</td>
-            <td className="mono">{e.rule}</td>
-            <td>{e.reason}</td>
+          <tr
+            key={e.mmsi}
+            onClick={onFocusVessel ? () => onFocusVessel(e.mmsi) : undefined}
+            className={onFocusVessel ? "clickable" : undefined}
+            title={onFocusVessel ? "Follow this vessel on the map" : undefined}
+          >
+            <td>
+              <span className="mono elim-mmsi">{e.mmsi}</span>
+              <span className="elim-type">{vesselByMmsi.get(e.mmsi)?.vessel_type ?? ""}</span>
+            </td>
+            <td>
+              <span className="mono elim-rule">{e.rule}</span>
+              <span className="elim-reason">{e.reason}</span>
+            </td>
           </tr>
         ))}
       </tbody>

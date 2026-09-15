@@ -4,6 +4,7 @@ import { MapboxOverlay } from "@deck.gl/mapbox";
 import * as maplibregl from "maplibre-gl";
 import { scalePow } from "d3-scale";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { firstAvailable } from "../api";
 import {
   type Bounds,
   overallBounds,
@@ -44,6 +45,67 @@ const RADAR_RGB = hexToRgb(COLORS.radar);
 const CURRENT_RGB = hexToRgb(COLORS.current);
 const WIND_RGB = hexToRgb(COLORS.wind);
 
+// Screen space the map chrome covers, in pixels, so a view preset frames
+// its data in the part of the map nobody has put a card over.
+export interface FitPadding {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+
+interface LabelCandidate {
+  vessel: VesselJSON;
+  pos: [number, number];
+  rank: number | null;
+}
+
+// Where each vessel label goes, as pixels below its default spot. Screen positions are estimated from the framed view rather than
+// read back from the map, which is exact enough to tell two labels apart
+// and needs no redraw when the camera eases between presets.
+function stackLabels(
+  items: LabelCandidate[],
+  view: { bounds: Bounds; padding: FitPadding; width: number; height: number; selectedMmsi: string | null },
+): Map<string, number> {
+  const rows = new Map<string, number>();
+  const w = view.width - view.padding.left - view.padding.right;
+  const h = view.height - view.padding.top - view.padding.bottom;
+  if (w <= 0 || h <= 0) return rows;
+  const [west, south, east, north] = view.bounds;
+  const mercY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+  const spanX = ((east - west) * Math.PI) / 180;
+  const spanY = mercY(north) - mercY(south);
+  const scale = Math.min(w / spanX, h / spanY);
+  const cx = view.padding.left + w / 2;
+  const cy = view.padding.top + h / 2;
+  const midX = (((east + west) / 2) * Math.PI) / 180;
+  const midY = (mercY(north) + mercY(south)) / 2;
+
+  const priority = (d: LabelCandidate) => (d.vessel.mmsi === view.selectedMmsi ? -1 : (d.rank ?? 1000));
+  const placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
+  for (const d of [...items].sort((a, b) => priority(a) - priority(b))) {
+    const x = cx + ((d.pos[0] * Math.PI) / 180 - midX) * scale + 12;
+    const y = cy - (mercY(d.pos[1]) - midY) * scale + 6;
+    const text = d.rank ? `#${d.rank}  ${d.vessel.mmsi}` : d.vessel.mmsi;
+    // Matches the label sizes below: 16 px for the selected vessel, 13
+    // for the rest, in a monospace face with its background padding.
+    const size = d.vessel.mmsi === view.selectedMmsi ? 16 : 13;
+    const boxW = text.length * size * 0.62 + 10;
+    const boxH = size + 8;
+    let shift = 0;
+    for (let tries = 0; tries < 8; tries++) {
+      const b = { x0: x, y0: y + shift, x1: x + boxW, y1: y + shift + boxH };
+      const hit = placed.filter((p) => b.x0 < p.x1 && b.x1 > p.x0 && b.y0 < p.y1 && b.y1 > p.y0);
+      if (hit.length === 0) break;
+      shift = Math.max(...hit.map((p) => p.y1)) - y + 2;
+    }
+    placed.push({ x0: x, y0: y + shift, x1: x + boxW, y1: y + shift + boxH });
+    rows.set(d.vessel.mmsi, shift);
+  }
+  return rows;
+}
+
 export interface LayerToggles {
   scene: boolean;
   detections: boolean;
@@ -62,13 +124,8 @@ export interface LayerToggles {
   wind: boolean;
 }
 
-// The scene PNG comes from the core service when it is up and from the
-// static copy in public/data when it is not, matching how api.ts loads
-// the bundle itself. Resolved once at module load, not per render.
-const SCENE_PREVIEW_SRC = "/api/scene_preview.png";
-const SCENE_PREVIEW_FALLBACK_SRC = "/data/scene_preview.png";
 
-function vesselColor(vessel: VesselJSON, culpritMmsi: string): [number, number, number] {
+function vesselColor(vessel: VesselJSON, culpritMmsi: string | null): [number, number, number] {
   const role = vesselRole(vessel, culpritMmsi);
   if (role === "eliminated") return CLEARED_RGB;
   if (role === "culprit") return SUSPECT_RGB;
@@ -104,8 +161,13 @@ interface Props {
   frame: TimelineFrame;
   toggles: LayerToggles;
   viewBounds: Bounds;
+  fitPadding: FitPadding;
   hoveredMmsi: string | null;
   selectedMmsi: string | null;
+  // Where the scene PNG may be, most live first: the core service when it
+  // is up, the static copy when it is not, each for the case on screen.
+  // See api.ts scenePreviewCandidates.
+  previewUrls: string[];
   onHoverVessel: (mmsi: string | null) => void;
   onSelectVessel: (mmsi: string | null) => void;
 }
@@ -116,8 +178,10 @@ export default function MapView({
   frame,
   toggles,
   viewBounds,
+  fitPadding,
   hoveredMmsi,
   selectedMmsi,
+  previewUrls,
   onHoverVessel,
   onSelectVessel,
 }: Props) {
@@ -157,23 +221,18 @@ export default function MapView({
 
   // Same live-then-static fallback as api.ts: the scene PNG is served by
   // the core service in dev and copied into public/data by `make
-  // seed-demo` for the fully offline path.
+  // seed-demo` for the fully offline path. Joined into a key so a new
+  // array with the same URLs does not refetch.
+  const previewKey = previewUrls.join("|");
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(SCENE_PREVIEW_SRC, { method: "HEAD" });
-        if (!cancelled) setSceneImageSrc(res.ok ? SCENE_PREVIEW_SRC : SCENE_PREVIEW_FALLBACK_SRC);
-        return;
-      } catch {
-        // core service not running, fall through to the static copy
-      }
-      if (!cancelled) setSceneImageSrc(SCENE_PREVIEW_FALLBACK_SRC);
-    })();
+    firstAvailable(previewKey.split("|")).then((src) => {
+      if (!cancelled) setSceneImageSrc(src);
+    });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [previewKey]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -184,7 +243,7 @@ export default function MapView({
         [viewBounds[0], viewBounds[1]],
         [viewBounds[2], viewBounds[3]],
       ],
-      fitBoundsOptions: { padding: 60 },
+      fitBoundsOptions: { padding: fitPadding },
       attributionControl: false,
       dragRotate: false,
       touchPitch: false,
@@ -197,7 +256,10 @@ export default function MapView({
   }, []);
 
   // Eased fly to whichever view preset is active. Skips the very first
-  // run, since the map constructor above already framed it.
+  // run, since the map constructor above already framed it. The padding
+  // is compared by value: a new object with the same numbers is not a
+  // reason to move the camera.
+  const paddingKey = `${fitPadding.top},${fitPadding.right},${fitPadding.bottom},${fitPadding.left}`;
   const didFitRef = useRef(false);
   useEffect(() => {
     const map = mapRef.current;
@@ -206,14 +268,20 @@ export default function MapView({
       didFitRef.current = true;
       return;
     }
+    // The pane may have just changed size under the map: stage 1 draws
+    // no scrubber, so stepping from it to stage 3 shortens the map in the
+    // same render that changes the view. Fitting against the stale size
+    // framed the traffic view for a taller map and cut off its bottom.
+    map.resize();
     map.fitBounds(
       [
         [viewBounds[0], viewBounds[1]],
         [viewBounds[2], viewBounds[3]],
       ],
-      { padding: 60, duration: 900 },
+      { padding: fitPadding, duration: 900 },
     );
-  }, [viewBounds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewBounds, paddingKey]);
 
   useEffect(() => {
     const overlay = overlayRef.current;
@@ -272,8 +340,8 @@ export default function MapView({
         data: graticule,
         getPosition: (d) => d.labelPos,
         getText: (d) => d.label,
-        getColor: [...GRATICULE_RGB, 220],
-        getSize: 10,
+        getColor: [...GRATICULE_RGB, 230],
+        getSize: 12,
         fontFamily: '"IBM Plex Mono", monospace',
         getTextAnchor: "start",
         getAlignmentBaseline: "top",
@@ -304,7 +372,7 @@ export default function MapView({
             id: "current-arrows",
             data: arrows,
             getPath: (d) => arrowPath(d, peak, arrowSpanDeg),
-            getColor: [...CURRENT_RGB, 170],
+            getColor: [...CURRENT_RGB, 120],
             getWidth: 1.4,
             widthMinPixels: 1.4,
             widthMaxPixels: 3,
@@ -322,7 +390,7 @@ export default function MapView({
             data: arrows,
             // Offset half a cell so wind does not sit on top of current.
             getPath: (d) => arrowPath(d, peak, arrowSpanDeg * 0.8, [0.35, 0.35]),
-            getColor: [...WIND_RGB, 150],
+            getColor: [...WIND_RGB, 105],
             getWidth: 1.2,
             widthMinPixels: 1.2,
             widthMaxPixels: 3,
@@ -482,6 +550,19 @@ export default function MapView({
         }))
         .filter((d): d is typeof d & { pos: [number, number] } => d.pos !== null);
 
+      // Vessels close together at one instant would otherwise print their
+      // MMSIs over each other into an unreadable smear. Labels are placed
+      // in priority order (the selected vessel, then by rank, then the
+      // eliminated) and any that would land on one already placed drops
+      // a row. Nothing is hidden: every vessel keeps its label.
+      const labelRows = stackLabels(positions, {
+        bounds: viewBounds,
+        padding: fitPadding,
+        width: containerRef.current?.clientWidth ?? 0,
+        height: containerRef.current?.clientHeight ?? 0,
+        selectedMmsi,
+      });
+
       layers.push(
         new ScatterplotLayer({
           id: "vessel-positions",
@@ -527,8 +608,8 @@ export default function MapView({
             ...vesselColor(d.vessel, bundle.culprit_mmsi),
             vesselAlpha(d.vessel.mmsi, selectedMmsi, hoveredMmsi),
           ],
-          getSize: 11,
-          getPixelOffset: [0, -14],
+          getSize: 13,
+          getPixelOffset: [0, -16],
           getTextAnchor: "middle",
           getAlignmentBaseline: "center",
           updateTriggers: { getColor: [hoveredMmsi, selectedMmsi], getAngle: [timeMs] },
@@ -546,14 +627,14 @@ export default function MapView({
             ...(d.vessel.mmsi === selectedMmsi ? PAPER_RGB : vesselColor(d.vessel, bundle.culprit_mmsi)),
             vesselAlpha(d.vessel.mmsi, selectedMmsi, hoveredMmsi),
           ],
-          getSize: (d) => (d.vessel.mmsi === selectedMmsi ? 13 : 11),
+          getSize: (d) => (d.vessel.mmsi === selectedMmsi ? 16 : 13),
           fontFamily: '"IBM Plex Mono", monospace',
           getTextAnchor: "start",
           getAlignmentBaseline: "top",
-          getPixelOffset: [12, 6],
           background: true,
           getBackgroundColor: [...hexToRgb(COLORS.ink), 190],
           backgroundPadding: [4, 2, 4, 2],
+          getPixelOffset: (d) => [12, 6 + (labelRows.get(d.vessel.mmsi) ?? 0)],
           pickable: true,
           onHover: (info) => onHoverVessel(info.object ? info.object.vessel.mmsi : null),
           onClick: (info) => onSelectVessel(info.object ? info.object.vessel.mmsi : null),
@@ -561,6 +642,7 @@ export default function MapView({
             getColor: [hoveredMmsi, selectedMmsi],
             getSize: [selectedMmsi],
             getText: [bundle],
+            getPixelOffset: [labelRows],
           },
         }),
       );
@@ -641,7 +723,7 @@ export default function MapView({
         const wrap = (title: string, body: string) =>
           ({
             html:
-              `<div style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;max-width:290px">` +
+              `<div style="font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:1.5;max-width:360px">` +
               `<div style="color:${COLORS.paper};font-weight:600">${title}</div>` +
               `<div style="color:${COLORS.muted}">${body}</div></div>`,
           });
@@ -709,6 +791,8 @@ export default function MapView({
         return null;
       },
     });
+    // fitPadding is tracked by value through paddingKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     bundle,
     frame,
@@ -721,6 +805,8 @@ export default function MapView({
     hoveredMmsi,
     selectedMmsi,
     graticule,
+    viewBounds,
+    paddingKey,
     onHoverVessel,
     onSelectVessel,
   ]);

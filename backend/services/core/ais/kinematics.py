@@ -50,7 +50,23 @@ DEFAULT_MAX_ROT_DEG_S = 0.25
 ROT_BY_TYPE: dict[str, float] = {
     "tanker": 0.20,
     "cargo": 0.25,
+    "passenger": 0.40,
+    "tug": 0.80,
     "fishing": 0.60,
+}
+
+# Steering wander, the small continuous hunting of a heading under
+# autopilot or helm in a seaway, and the matching surge in speed. Each is
+# an Ornstein-Uhlenbeck process: (standard deviation, correlation time in
+# minutes). Wander perturbs the course the vessel is steering for, and the
+# rate of turn bound still applies on top, so it bends a track into gentle
+# curves rather than putting kinks in it. Small vessels hunt more.
+WANDER_BY_TYPE: dict[str, dict[str, float]] = {
+    "tanker": {"heading_sd_deg": 1.2, "heading_tau_min": 12.0, "speed_sd_kn": 0.15, "speed_tau_min": 25.0},
+    "cargo": {"heading_sd_deg": 1.5, "heading_tau_min": 10.0, "speed_sd_kn": 0.20, "speed_tau_min": 20.0},
+    "passenger": {"heading_sd_deg": 1.2, "heading_tau_min": 10.0, "speed_sd_kn": 0.25, "speed_tau_min": 15.0},
+    "tug": {"heading_sd_deg": 3.0, "heading_tau_min": 6.0, "speed_sd_kn": 0.30, "speed_tau_min": 10.0},
+    "fishing": {"heading_sd_deg": 5.0, "heading_tau_min": 5.0, "speed_sd_kn": 0.35, "speed_tau_min": 8.0},
 }
 
 # Speed change, knots per minute. Deceleration is faster than
@@ -139,6 +155,8 @@ def sail(
     accel_kn_min: float = DEFAULT_ACCEL_KN_MIN,
     decel_kn_min: float = DEFAULT_DECEL_KN_MIN,
     step_seconds: float = STEP_SECONDS,
+    rng: np.random.Generator | None = None,
+    wander: dict[str, float] | None = None,
 ) -> list[tuple[datetime.datetime, float, float, float, float]]:
     """Integrates a vessel through its waypoints under bounded turn and
     speed rates.
@@ -154,6 +172,11 @@ def sail(
     right way round: a schedule that the hull cannot keep is the
     schedule's problem, and forcing the track to honour it is exactly
     how the instantaneous turns got in.
+
+    With `rng`, the vessel also wanders: the course it steers and the
+    speed it holds each carry an Ornstein-Uhlenbeck perturbation from
+    WANDER_BY_TYPE (or `wander`). Without `rng` the integration is the
+    exact deterministic one, which is what the kinematics tests measure.
     """
     if len(waypoints) < 2:
         raise ValueError("a track needs at least two waypoints")
@@ -177,6 +200,12 @@ def sail(
     t_end = waypoints[-1][2]
     step = datetime.timedelta(seconds=step_seconds)
 
+    w = None
+    if rng is not None:
+        w = {**WANDER_BY_TYPE.get(vessel_type, WANDER_BY_TYPE["cargo"]), **(wander or {})}
+    heading_offset = 0.0
+    speed_offset = 0.0
+
     while t < t_end and target_index < len(waypoints):
         tgt_lat, tgt_lon, tgt_time = waypoints[target_index]
 
@@ -199,8 +228,16 @@ def sail(
             target_index += 1
             continue
 
+        if w is not None:
+            # Exact OU update over one step, so the wander statistics do
+            # not depend on the integration step.
+            a_h = math.exp(-step_seconds / (60.0 * w["heading_tau_min"]))
+            heading_offset = a_h * heading_offset + w["heading_sd_deg"] * math.sqrt(1 - a_h * a_h) * float(rng.normal())
+            a_s = math.exp(-step_seconds / (60.0 * w["speed_tau_min"]))
+            speed_offset = a_s * speed_offset + w["speed_sd_kn"] * math.sqrt(1 - a_s * a_s) * float(rng.normal())
+
         # Steer towards the mark, bounded by the rate of turn.
-        desired_heading = bearing_to(lat, lon, tgt_lat, tgt_lon)
+        desired_heading = (bearing_to(lat, lon, tgt_lat, tgt_lon) + heading_offset) % 360.0
         turn = signed_turn(heading, desired_heading)
         max_turn = rot * step_seconds
         heading = (heading + float(np.clip(turn, -max_turn, max_turn))) % 360.0
@@ -208,7 +245,7 @@ def sail(
         # Speed needed to make the mark on time, bounded by how fast the
         # hull can change speed.
         remaining_h = max((tgt_time - t).total_seconds() / 3600.0, 1e-6)
-        desired_speed = float(np.clip(to_go_km / remaining_h / KM_PER_NM, 0.0, 25.0))
+        desired_speed = float(np.clip(to_go_km / remaining_h / KM_PER_NM + speed_offset, 0.0, 25.0))
         delta = desired_speed - speed
         max_delta = (accel_kn_min if delta > 0 else decel_kn_min) * (step_seconds / 60.0)
         speed += float(np.clip(delta, -max_delta, max_delta))

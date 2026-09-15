@@ -1,0 +1,304 @@
+# The case study registry. See PLAN.md sections 6, 10, 11, 12 and 20.
+#
+# Why a separate file rather than more keys in demo.yaml: demo.yaml is the
+# hero scenario's definition and carries the problem statement's
+# permission for synthetic AIS verbatim, and every case below inherits
+# both. This file is a list of scenarios that differ in weather, place,
+# traffic and outcome, and a list is easier to read, diff and extend on
+# its own than folded into a document that describes one incident.
+#
+# What a case may set: the scene (where, how bright the sea is under that
+# wind, where the real slick texture is composited), the forcing (wind
+# and current regimes for the shared generator in
+# scripts/synthetic_metocean.py), and the AIS scenario (which of the five
+# PLAN.md section 10 roles are present, the culprit's dark period and
+# lane heading, the background traffic, and for a case whose premise is a
+# vessel that never broadcast, where that vessel's hull was).
+#
+# What a case may NOT set: its verdict, its gate verdict, its wind speed
+# as reported, or any count. Those are read back from the bundle the real
+# engine produced (scripts/seed_demo.py writes them into
+# data/precomputed/cases.json), and `intended_verdict` below is only the
+# design intent, recorded so a mismatch is reported loudly rather than
+# papered over. Nothing reads it to decide anything.
+#
+# Every case is illustrative and synthetic, not a real incident. All text
+# here that reaches the UI or the dossier is plain prose with no em
+# dashes.
+#
+# Build one case: make seed-case CASE=<id>. Build all: make seed-demo.
+
+default_case: arabian-sea-discharge
+
+cases:
+  - id: arabian-sea-discharge
+    case_id: DRISHTA-DEMO-0001
+    title: Broadcasting tanker discharge
+    subtitle: >-
+      A laden tanker slows along its lane, lays a fresh slick in a
+      moderate northwesterly and alters course, all while its AIS stays
+      on. One vessel dominates the evidence.
+    region: Eastern Arabian Sea
+    intended_verdict: ATTRIBUTED
+    acquired_at: "2026-01-15T02:30:00"
+    seed: 26143
+    # The committed staged sample scene, data/fixtures/synthetic_scene.tif.
+    scene: committed
+    forcing:
+      # January northeast monsoon, veering northwesterly off the coast.
+      wind:
+        pass_speed_ms: 6.2
+        pass_point: [17.05, 68.0]
+        toward_deg: 135.0
+        trend_per_day: 0.06
+        veer_deg_per_day: 9.0
+        weibull_k: 2.1
+        t2m_base_c: 24.8
+      currents:
+        mean_toward_deg: 245.0
+        mean_speed_ms: 0.13
+        inertial_amplitude_ms: 0.05
+        sst_base_c: 26.6
+    ais:
+      roles: [culprit, wrong_time, dark_far, constant_speed_close, dark_no_radar]
+      # Broadcasting throughout. PLAN.md section 12 only lets a vessel be
+      # ATTRIBUTED if its track is observed rather than reconstructed
+      # across a gap, so this is the scenario that can reach that class.
+      culprit_dark_gap_minutes: 0
+      approach_bearing_deg: 60.0
+      background:
+        n_lane_vessels: 9
+        lanes:
+          - name: Gulf of Oman to south India and Malacca
+            bearing_deg: 135.0
+            offset_km: 20.0
+            share: 0.55
+            services: {tanker: 0.6, container: 0.2, bulk: 0.2}
+          - name: Gulf of Aden to Mumbai and JNPT
+            bearing_deg: 62.0
+            offset_km: -14.0
+            share: 0.45
+            services: {container: 0.45, bulk: 0.2, tanker: 0.25, passenger: 0.1}
+        fishing_grounds:
+          - {east_km: -30.0, north_km: 22.0, radius_km: 7.0, n: 2}
+        n_tugs: 1
+
+  - id: monsoon-high-wind
+    case_id: DRISHTA-DEMO-0002
+    title: Gust front splits the scene
+    subtitle: >-
+      Early southwest monsoon. A gust front crosses the acquisition, the
+      wind gate suppresses the slick on its windy side as breakup, and
+      the slick that survives the gate still points to one vessel.
+    region: Eastern Arabian Sea, southwest monsoon
+    intended_verdict: ATTRIBUTED
+    acquired_at: "2026-06-08T13:40:00"
+    seed: 26243
+    scene:
+      size: 640
+      seed: 611
+      center: [16.95, 68.025]
+      # Sea clutter is much brighter at high wind, with faint wind rows.
+      sea_db_mean: -12.5
+      sea_db_std: 1.8
+      wind_streaks_db: 0.5
+      wind_streak_toward_deg: 65.0
+      slicks:
+        - {at: [40, 20], contrast_scale: 2.6, zoom: 1.0}
+        - {at: [330, 380], contrast_scale: 2.2, rot90: 1, zoom: 0.9}
+    forcing:
+      domain: {lat: [15.6, 17.8], lon: [66.2, 69.2], step_deg: 0.05}
+      wind:
+        pass_speed_ms: 10.3
+        # The western slick's wind cell.
+        pass_point: [16.95, 68.0]
+        toward_deg: 62.0
+        trend_per_day: 0.05
+        veer_deg_per_day: 6.0
+        meso_amplitude_frac: 0.08
+        weibull_k: 2.4
+        gust_intensity: 0.06
+        breeze_amplitude_ms: 0.4
+        front:
+          delta_ms: 2.2
+          width_km: 3.0
+          normal_toward_deg: 95.0
+          through: [16.95, 68.025]
+          speed_kmh: 5.0
+        t2m_base_c: 28.6
+        t2m_lat_gradient_c: -0.4
+        t2m_diurnal_c: 0.9
+      currents:
+        mean_toward_deg: 110.0
+        mean_speed_ms: 0.24
+        eddies:
+          - {lat: 16.6, lon: 67.4, radius_km: 55.0, vmax_ms: 0.18, sense: anticyclonic}
+          - {lat: 17.3, lon: 68.6, radius_km: 40.0, vmax_ms: 0.12, sense: cyclonic}
+        submeso_amplitude_ms: 0.04
+        m2_amplitude_ms: 0.03
+        # A strong monsoon wind burst two days ago leaves a large
+        # near-inertial swell in the currents.
+        inertial_amplitude_ms: 0.12
+        inertial_event_h: -40.0
+        inertial_decay_h: 60.0
+        sst_base_c: 28.9
+        sst_lat_gradient_c: -0.4
+        sst_diurnal_c: 0.2
+    ais:
+      roles: [culprit, wrong_time, dark_far, constant_speed_close, dark_no_radar]
+      culprit_dark_gap_minutes: 0
+      approach_bearing_deg: 66.0
+      background:
+        n_lane_vessels: 9
+        lanes:
+          - name: Gulf of Oman to south India and Malacca
+            bearing_deg: 135.0
+            offset_km: 26.0
+            share: 0.5
+            services: {tanker: 0.6, container: 0.25, bulk: 0.15}
+          - name: Gulf of Aden to Mumbai and JNPT
+            bearing_deg: 64.0
+            offset_km: 16.0
+            share: 0.5
+            services: {container: 0.5, bulk: 0.2, tanker: 0.3}
+        fishing_grounds: []
+        n_tugs: 1
+
+  - id: calm-intermonsoon
+    case_id: DRISHTA-DEMO-0003
+    title: Calm water, wide field
+    subtitle: >-
+      Pre-monsoon calm. The wind at the slick sits just above the gate's
+      low-wind threshold so the detection is downgraded, the slick is
+      older and its origin field wider, and the leading vessel went dark
+      while it crossed it, so the case is a ranked list, not an
+      attribution.
+    region: Eastern Arabian Sea, spring intermonsoon
+    intended_verdict: RANKED
+    acquired_at: "2026-04-22T01:10:00"
+    seed: 26343
+    scene:
+      size: 512
+      seed: 734
+      center: [17.2, 67.8]
+      # Low wind leaves a dark, smooth sea and a faint slick.
+      sea_db_mean: -19.5
+      sea_db_std: 1.3
+      slicks:
+        - {at: [100, 100], contrast_scale: 2.0, flip: true, zoom: 1.1}
+        - {at: [300, 260], contrast_scale: 1.8, rot90: 2, zoom: 0.7}
+    forcing:
+      wind:
+        pass_speed_ms: 3.0
+        pass_point: [17.2, 67.8]
+        toward_deg: 115.0
+        trend_per_day: -0.05
+        veer_deg_per_day: 28.0
+        meso_amplitude_frac: 0.16
+        meso_crosswind_ratio: 1.4
+        meso_length_km: 45.0
+        weibull_k: 1.7
+        breeze_amplitude_ms: 0.7
+        gust_intensity: 0.08
+        t2m_base_c: 28.2
+        t2m_diurnal_c: 1.1
+      currents:
+        mean_toward_deg: 200.0
+        mean_speed_ms: 0.06
+        eddies:
+          - {lat: 17.35, lon: 67.65, radius_km: 50.0, vmax_ms: 0.24, sense: anticyclonic}
+          - {lat: 16.7, lon: 68.3, radius_km: 45.0, vmax_ms: 0.2, sense: cyclonic}
+        submeso_amplitude_ms: 0.035
+        inertial_amplitude_ms: 0.04
+        sst_base_c: 29.4
+        sst_lat_gradient_c: -0.3
+        sst_diurnal_c: 0.45
+    ais:
+      roles: [culprit, wrong_time, dark_far, constant_speed_close, dark_no_radar]
+      # The PLAN.md section 10 culprit, dark for an hour over the origin.
+      # With the culprit broadcasting throughout, this case came out
+      # ATTRIBUTED (margin 3.65 over the runner-up): the wider field alone
+      # did not dilute the lead. That result is recorded here rather than
+      # tuned away.
+      culprit_dark_gap_minutes: 60
+      approach_bearing_deg: 75.0
+      background:
+        n_lane_vessels: 10
+        lanes:
+          - name: Gulf of Oman to south India and Malacca
+            bearing_deg: 135.0
+            offset_km: 4.0
+            share: 0.5
+            services: {tanker: 0.55, container: 0.25, bulk: 0.2}
+          - name: Gulf of Aden to Mumbai and JNPT
+            bearing_deg: 70.0
+            offset_km: 2.0
+            share: 0.5
+            services: {container: 0.4, bulk: 0.25, tanker: 0.35}
+        fishing_grounds:
+          - {east_km: 12.0, north_km: -10.0, radius_km: 8.0, n: 2}
+        n_tugs: 1
+
+  - id: dark-vessel-night-pass
+    case_id: DRISHTA-DEMO-0004
+    title: Radar sees a dark hull
+    subtitle: >-
+      A night pass in the northeast monsoon. No broadcasting vessel was
+      where the oil came from when it could have been released, but the
+      radar image shows a hull with no AIS inside the origin field.
+    region: Eastern Arabian Sea, off the shipping lanes
+    intended_verdict: DARK_CONFIRMED
+    acquired_at: "2026-02-19T01:05:00"
+    seed: 26443
+    scene:
+      size: 512
+      seed: 877
+      center: [16.8, 68.3]
+      sea_db_mean: -16.0
+      sea_db_std: 1.5
+      slicks:
+        - {at: [120, 140], contrast_scale: 2.3, rot90: 3}
+    forcing:
+      wind:
+        pass_speed_ms: 5.1
+        pass_point: [16.8, 68.3]
+        toward_deg: 205.0
+        trend_per_day: 0.04
+        veer_deg_per_day: -6.0
+        weibull_k: 2.2
+        t2m_base_c: 24.2
+        t2m_diurnal_c: 1.5
+      currents:
+        mean_toward_deg: 230.0
+        mean_speed_ms: 0.12
+        eddies:
+          - {lat: 16.5, lon: 68.6, radius_km: 40.0, vmax_ms: 0.14, sense: cyclonic}
+        inertial_amplitude_ms: 0.05
+        sst_base_c: 26.1
+    ais:
+      # The source never broadcast, so there is no culprit track, and the
+      # two roles that pass the origin at the right time are left out:
+      # this case's premise is that no broadcasting vessel did.
+      roles: [wrong_time, dark_far]
+      culprit_dark_gap_minutes: 0
+      approach_bearing_deg: 60.0
+      dark_hull:
+        offset_m: [350.0, -250.0]
+      background:
+        n_lane_vessels: 9
+        lanes:
+          - name: Gulf of Oman to south India and Malacca
+            bearing_deg: 135.0
+            offset_km: 38.0
+            share: 0.55
+            services: {tanker: 0.6, container: 0.2, bulk: 0.2}
+          # Crosses the origin area, but square to the slick's axis and at
+          # transit speed: present, not plausible.
+          - name: Gulf of Aden to Mumbai and JNPT
+            bearing_deg: 64.0
+            offset_km: -4.0
+            share: 0.45
+            services: {container: 0.5, bulk: 0.2, tanker: 0.3}
+        fishing_grounds:
+          - {east_km: 28.0, north_km: 18.0, radius_km: 6.0, n: 2}
+        n_tugs: 1

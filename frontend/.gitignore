@@ -26,3 +26,4 @@ public/data/
 *.njsproj
 *.sln
 *.sw?
+public/samples/

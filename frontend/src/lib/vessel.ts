@@ -12,7 +12,7 @@ import type { AISPointJSON, DarkGapJSON, DemoBundle, VesselJSON } from "../types
 
 export type VesselRole = "culprit" | "survivor" | "eliminated";
 
-export function vesselRole(vessel: VesselJSON, culpritMmsi: string): VesselRole {
+export function vesselRole(vessel: VesselJSON, culpritMmsi: string | null): VesselRole {
   if (vessel.status === "eliminated") return "eliminated";
   if (vessel.mmsi === culpritMmsi) return "culprit";
   return "survivor";

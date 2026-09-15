@@ -28,9 +28,14 @@ What it produces, in dependency order:
                   Open-ocean surface currents with a real time axis.
   wind_offshore   data/fixtures/synthetic_wind_offshore.nc
                   Open-ocean 10m wind over the same domain as currents.
+                  Currents and wind_offshore are the default case study's
+                  forcing, from config/cases.yaml, built by the shared
+                  generator in scripts/synthetic_metocean.py.
   origin_field    data/fixtures/synthetic_origin_field.nc
                   A cached small backward ensemble. Needs currents and
-                  wind_offshore on disk first, which is why it runs last.
+                  wind_offshore on disk first.
+  cases           data/fixtures/*__<case id>.{tif,nc}
+                  Every other case study's scene, wind and currents.
 
 The synthetic AIS traffic is NOT written here. It is generated in memory
 from the origin field every time, by services/core/ais/synthetic.py, so
@@ -92,7 +97,25 @@ DATASETS: list[tuple[str, str, str, str]] = [
         "data/fixtures/synthetic_origin_field.nc",
         "cached backward ensemble, needs currents and wind_offshore",
     ),
+    (
+        "cases",
+        "make_fixture_cases.py",
+        "",
+        "each other case study's scene, wind and currents, from config/cases.yaml",
+    ),
 ]
+
+
+def _outputs(name: str, out_path: str) -> list[str]:
+    """Every file a dataset writes. The case studies write several, listed
+    by the registry, so they are resolved here rather than hardcoded."""
+    if name != "cases":
+        return [out_path]
+    if SCRIPTS_DIR not in sys.path:
+        sys.path.insert(0, SCRIPTS_DIR)
+    import make_fixture_cases
+
+    return make_fixture_cases.all_outputs()
 
 NAMES = [name for name, _, _, _ in DATASETS]
 
@@ -113,13 +136,14 @@ def _print_status() -> None:
     print(f"{'dataset':<16} {'status':<9} {'size':>8}  output")
     print("-" * 78)
     for name, _, out_path, _ in DATASETS:
-        present = os.path.exists(os.path.join(BACKEND_DIR, out_path))
-        status = "present" if present else "missing"
-        size = _human_size(os.path.join(BACKEND_DIR, out_path)) if present else "-"
-        print(f"{name:<16} {status:<9} {size:>8}  {out_path}")
+        for path in _outputs(name, out_path):
+            present = os.path.exists(os.path.join(BACKEND_DIR, path))
+            status = "present" if present else "missing"
+            size = _human_size(os.path.join(BACKEND_DIR, path)) if present else "-"
+            print(f"{name:<16} {status:<9} {size:>8}  {path}")
 
 
-def _run_generator(script_name: str) -> None:
+def _run_generator(script_name: str, force: bool = False) -> None:
     """Executes one make_fixture_*.py as if it were run directly.
 
     runpy rather than subprocess so the interpreter already running this
@@ -127,6 +151,14 @@ def _run_generator(script_name: str) -> None:
     PYTHONPATH environment variable, and a traceback that points at the
     real failure instead of a non-zero exit code.
     """
+    if script_name == "make_fixture_cases.py":
+        # Several outputs, some possibly present: let it skip per file.
+        if SCRIPTS_DIR not in sys.path:
+            sys.path.insert(0, SCRIPTS_DIR)
+        import make_fixture_cases
+
+        make_fixture_cases.main(["--force"] if force else [])
+        return
     runpy.run_path(os.path.join(SCRIPTS_DIR, script_name), run_name="__main__")
 
 
@@ -175,13 +207,13 @@ def main(argv: list[str] | None = None) -> int:
     for name, script_name, out_path, description in DATASETS:
         if name not in selected:
             continue
-        if os.path.exists(out_path) and not args.force:
-            print(f"[skip]  {name:<14} already at {out_path} (use --force to rebuild)")
+        if all(os.path.exists(p) for p in _outputs(name, out_path)) and not args.force:
+            print(f"[skip]  {name:<14} already present (use --force to rebuild)")
             skipped.append(name)
             continue
         print(f"[build] {name:<14} {description}")
         started = time.monotonic()
-        _run_generator(script_name)
+        _run_generator(script_name, force=args.force)
         print(f"        {name:<14} done in {time.monotonic() - started:.1f}s")
         built.append(name)
 

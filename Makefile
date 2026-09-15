@@ -1,4 +1,4 @@
-.PHONY: setup dev venv up down run-core run-detection test test-core test-detection fetch-data synthetic fixtures sample seed-demo validate deck lint
+.PHONY: setup dev venv up down run-core run-detection test test-core test-detection fetch-data synthetic fixtures sample seed-demo seed-case validate deck lint
 
 # Installs everything needed to run the demo, skipping anything already
 # in place: backend venv, the segmentation model, the fixture data, the
@@ -8,11 +8,7 @@ setup:
 	$(MAKE) -C backend fetch-model
 	$(MAKE) -C backend ensure-fixtures
 	$(MAKE) -C backend ensure-demo-bundle
-	@if [ -d frontend/node_modules ]; then \
-		echo "frontend/node_modules already present, skipping npm install"; \
-	else \
-		cd frontend && npm install; \
-	fi
+	cd frontend && npm install
 
 # Runs the core service (http://localhost:8000) and the frontend dev
 # server (http://localhost:5173) together. Ctrl+C stops both.
@@ -66,8 +62,13 @@ fixtures:
 sample:
 	$(MAKE) -C backend sample
 
+# Every case study in backend/config/cases.yaml, copied into
+# frontend/public/data/. One case: make seed-case CASE=<id>.
 seed-demo:
 	$(MAKE) -C backend seed-demo
+
+seed-case:
+	$(MAKE) -C backend seed-case CASE=$(CASE)
 
 validate:
 	$(MAKE) -C backend validate

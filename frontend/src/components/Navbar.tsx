@@ -1,51 +1,23 @@
-import { useEffect, useState } from "react";
-import { Waves } from "lucide-react";
-
-export type RightTab = "case" | "suspects" | "eliminations" | "ledgers";
+import { useEffect, useState, type ReactNode } from "react";
+import { FileText, ScanSearch } from "lucide-react";
+import { firstAvailable } from "../api";
 
 interface Props {
-  stage: number;
-  rightTab: RightTab;
-  onNavigate: (stage: number, tab?: RightTab) => void;
+  // Candidate URLs for this case's dossier PDF, most live first. See
+  // api.ts dossierCandidates.
+  dossierUrls: string[];
+  // The case switcher, when there is more than one case to switch
+  // between. Absent in a checkout with only the single demo bundle.
+  caseSwitcher?: ReactNode;
 }
 
-type NavItem =
-  | { label: string; href: string }
-  | { label: string; stage: number; tab?: RightTab }
-  | { label: string; dossier: true };
-
-// Every item goes somewhere different. The stage rail below already
-// steps through the three stages; this adds the two stage 3 tabs a
-// presenter is most often asked for, the way back to the landing page,
-// and the dossier.
-const NAV_ITEMS: NavItem[] = [
-  { label: "OVERVIEW", href: "/" },
-  { label: "DETECTION", stage: 1 },
-  { label: "ORIGIN", stage: 2 },
-  { label: "TRAFFIC", stage: 3, tab: "suspects" },
-  { label: "EVIDENCE", stage: 3, tab: "case" },
-  { label: "CASES", dossier: true },
-];
-
-// Stage 3 has four tabs and two nav items: the case build is EVIDENCE,
-// every other tab is the traffic it was derived from.
-function activeLabel(stage: number, tab: RightTab): string {
-  if (stage === 1) return "DETECTION";
-  if (stage === 2) return "ORIGIN";
-  return tab === "case" ? "EVIDENCE" : "TRAFFIC";
-}
-
-async function openDossier() {
-  try {
-    const res = await fetch("/api/dossier", { method: "HEAD" });
-    if (res.ok) {
-      window.open("/api/dossier", "_blank");
-      return;
-    }
-  } catch {
-    // core service not running, fall through to the static copy
-  }
-  window.open("/data/case_dossier.pdf", "_blank");
+async function openDossier(candidates: string[]) {
+  // Opened before the HEAD requests resolve and pointed afterwards, so a
+  // popup blocker sees a window opened by the click itself.
+  const win = window.open("", "_blank");
+  const url = await firstAvailable(candidates);
+  if (win) win.location.href = url;
+  else window.open(url, "_blank");
 }
 
 function useUtcClock() {
@@ -62,56 +34,42 @@ function useUtcClock() {
   };
 }
 
-export default function Navbar({ stage, rightTab, onNavigate }: Props) {
+// The header carries only what the stage rail below does not: which case
+// is on screen, the other pages, and the dossier. The stages themselves
+// are the rail's job, and naming them twice made two navigation systems
+// for the same three places.
+export default function Navbar({ dossierUrls, caseSwitcher }: Props) {
   const utc = useUtcClock();
-  const active = activeLabel(stage, rightTab);
 
   return (
     <header className="topbar">
-      {/* Full page loads to and from the landing page: the two pages share
-          class names, and each only ever loads its own stylesheet. */}
+      {/* Full page loads to and from the other pages: they share class
+          names, and each only ever loads its own stylesheet. */}
       <a className="brand" href="/" aria-label="DRISHTA home">
-        <div className="brand-mark">
-          <Waves size={42} strokeWidth={1.4} />
-        </div>
-        <div className="brand-text">
+        <img className="brand-mark" src="/brand/drishta-mark-256.png" width={40} height={40} alt="" />
+        <span className="brand-text">
           <strong>DRISHTA</strong>
           <span>MARITIME INTELLIGENCE</span>
-        </div>
+        </span>
       </a>
 
-      <nav className="main-nav">
-        {NAV_ITEMS.map((item) => {
-          const className = item.label === active ? "active" : undefined;
-          if ("href" in item) {
-            return (
-              <a key={item.label} className={className} href={item.href}>
-                {item.label}
-              </a>
-            );
-          }
-          return (
-            <button
-              key={item.label}
-              type="button"
-              className={className}
-              onClick={"dossier" in item ? openDossier : () => onNavigate(item.stage, item.tab)}
-              title={"dossier" in item ? "Opens the case dossier PDF in a new tab." : undefined}
-            >
-              {item.label}
-            </button>
-          );
-        })}
+      {caseSwitcher}
+
+      <nav className="main-nav" aria-label="Pages">
+        <a href="/">Overview</a>
+        <a href="/inspect" title="Open the image inspector.">
+          <ScanSearch size={15} strokeWidth={1.8} aria-hidden="true" />
+          Inspect
+        </a>
+        <button type="button" onClick={() => openDossier(dossierUrls)} title="Opens this case's dossier PDF in a new tab.">
+          <FileText size={15} strokeWidth={1.8} aria-hidden="true" />
+          Dossier
+        </button>
       </nav>
 
-      <div className="status">
-        <i />
-        SYSTEM READY
-      </div>
-
-      <div className="utc">
-        <span>UTC&nbsp; {utc.time}</span>
-        <small>{utc.date}</small>
+      <div className="utc" aria-label="Current time, UTC">
+        <span className="mono">{utc.time}</span>
+        <small>UTC · {utc.date}</small>
       </div>
     </header>
   );

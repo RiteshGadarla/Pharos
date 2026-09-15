@@ -1,5 +1,9 @@
+import { ArrowLeft } from "lucide-react";
+import Disclosure from "./Disclosure";
+import FactorBars from "./FactorBars";
+import Stat from "./Stat";
 import { darkReachKm, rankOf, vesselRole } from "../lib/vessel";
-import { FACTOR_LABELS, type DemoBundle } from "../types";
+import type { DemoBundle } from "../types";
 
 interface Props {
   bundle: DemoBundle;
@@ -8,13 +12,9 @@ interface Props {
   onClear: () => void;
 }
 
-// One vessel's whole story, shown when it is clicked on the map.
-//
-// Clicking a track used to do almost nothing visible: it changed a
-// highlight colour. The map is where a viewer forms a question about a
-// specific vessel ("what is that one doing?") and until now the only
-// place with an answer was a ranked list that did not obviously
-// correspond to anything on screen.
+// One vessel's whole story, shown when it is clicked on the map. It takes
+// the whole panel while it is open, rather than stacking above the case,
+// so there is one thing to read at a time and one obvious way back.
 //
 // The order here is the order the question gets asked in: who is it,
 // what did it do, when was it not looking, and only then what the
@@ -38,71 +38,68 @@ export default function VesselFocusCard({ bundle, mmsi, timeMs, onClear }: Props
 
   return (
     <section className={`focus-card role-${role}`}>
-      <div className="focus-head">
-        <div>
-          <span className="focus-mmsi mono">{vessel.mmsi}</span>
-          <span className="focus-type">{vessel.vessel_type}</span>
-        </div>
-        <button className="focus-clear" onClick={onClear} title="Show every vessel again">
-          Clear
+      <div className="focus-bar">
+        <button className="back-button" onClick={onClear} title="Show every vessel again">
+          <ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" />
+          Back to the case
         </button>
+        <span className={`pill status-${role}`}>
+          {role === "eliminated" ? "Eliminated" : `Rank ${rank ?? "?"} of ${bundle.suspects.length}`}
+        </span>
       </div>
 
-      <div className={`focus-status status-${role}`}>
-        {role === "eliminated"
-          ? "Eliminated"
-          : role === "culprit"
-            ? `Rank ${rank ?? "?"} of ${bundle.suspects.length} survivors`
-            : `Rank ${rank ?? "?"} of ${bundle.suspects.length} survivors`}
+      <div className="panel-hero focus-hero">
+        <span className="stat-label">{vessel.vessel_type}</span>
+        <span className="focus-mmsi mono">{vessel.mmsi}</span>
+        {vessel.elimination && (
+          <div className="focus-elimination">
+            <span className="mono focus-rule">{vessel.elimination.rule}</span>
+            <p>{vessel.elimination.reason}</p>
+          </div>
+        )}
+        <div className="stat-row three">
+          <Stat size="sm" label="Track" value={`${relHours(first.ts, acq)} to ${relHours(last.ts, acq)}`} />
+          <Stat size="sm" label="Pings" value={vessel.points.length} />
+          <Stat size="sm" label="Dark periods" value={vessel.dark_gaps.length} tone={vessel.dark_gaps.length ? "suspect" : "default"} />
+        </div>
       </div>
 
-      {vessel.elimination && (
-        <p className="focus-reason">
-          {vessel.elimination.reason}
-          <span className="focus-rule mono">{vessel.elimination.rule}</span>
-        </p>
-      )}
-
-      <dl className="evidence-facts">
-        <dt>Track</dt>
-        <dd className="mono">
-          {relHours(first.ts, acq)} to {relHours(last.ts, acq)}
-        </dd>
-        <dt>Pings</dt>
-        <dd className="mono">{vessel.points.length}</dd>
-      </dl>
-
-      {vessel.dark_gaps.length > 0 ? (
-        <div className="focus-dark">
-          <h3 className="focus-sub">Dark periods</h3>
-          {vessel.dark_gaps.map((g) => {
+      <section className="panel-section">
+        <h3 className="section-title">When it was not broadcasting</h3>
+        {vessel.dark_gaps.length > 0 ? (
+          vessel.dark_gaps.map((g) => {
             const live = timeMs >= new Date(g.start).getTime() && timeMs <= new Date(g.end).getTime();
             return (
-              <div key={g.start} className={`focus-gap ${live ? "live" : ""}`}>
-                <div className="focus-gap-line">
+              <div key={g.start} className={`gap-card${live ? " live" : ""}`}>
+                <div className="gap-top">
                   <span className="mono">
                     {relHours(g.start, acq)} to {relHours(g.end, acq)}
                   </span>
-                  <span className="mono focus-gap-dur">{Math.round(g.duration_min)} min</span>
-                  {live && <span className="focus-gap-now">DARK NOW</span>}
+                  {live && <span className="pill dark-now">Dark now</span>}
                 </div>
-                {/* The number that explains the size of the ring on the
-                    map, which otherwise reads as an arbitrary circle. */}
-                <p className="focus-gap-note">
-                  Silent for {Math.round(g.duration_min)} minutes, so it could have travelled up to{" "}
-                  {Math.round(darkReachKm(g))} km in any direction. The dashed line on the map assumes it
-                  held its course; the shaded ring is everywhere else it could have gone.
-                </p>
+                <div className="stat-row">
+                  <Stat size="lg" label="Silent" value={Math.round(g.duration_min)} unit="min" tone="suspect" />
+                  {/* The number that explains the size of the ring on the
+                      map, which otherwise reads as an arbitrary circle. */}
+                  <Stat size="lg" label="Could reach" value={Math.round(darkReachKm(g))} unit="km" />
+                </div>
+                <Disclosure label="What the ring and the dashed line show">
+                  <p>
+                    Silent for {Math.round(g.duration_min)} minutes, so it could have travelled up to{" "}
+                    {Math.round(darkReachKm(g))} km in any direction. The dashed line on the map assumes it held its
+                    course; the shaded ring is everywhere else it could have gone.
+                  </p>
+                </Disclosure>
               </div>
             );
-          })}
-        </div>
-      ) : (
-        <p className="focus-gap-note muted">
-          Broadcast continuously through the window. Every position on the map for this vessel was reported,
-          none reconstructed.
-        </p>
-      )}
+          })
+        ) : (
+          <p className="prose muted">
+            Broadcast continuously through the window. Every position on the map for this vessel was reported, none
+            reconstructed.
+          </p>
+        )}
+      </section>
 
       {timing && timing.lag_hours !== null && (
         /* What F9 actually looked at for this vessel. The bar in the
@@ -110,45 +107,49 @@ export default function VesselFocusCard({ bundle, mmsi, timeMs, onClear }: Props
            number, this says which hour produced the number and whether
            that hour was inside the window, inside the window's own
            uncertainty, or genuinely outside both. */
-        <div className={`focus-timing timing-${timingState(timing)}`}>
-          <h3 className="focus-sub">When it was over the origin</h3>
-          <div className="focus-timing-line">
-            <span className="mono focus-timing-lag">-{timing.lag_hours.toFixed(1)}h</span>
-            <span className={`timing-pill timing-${timingState(timing)}`}>
+        <section className={`panel-section focus-timing timing-${timingState(timing)}`}>
+          <h3 className="section-title">When it was over the origin</h3>
+          <div className="timing-line">
+            <Stat size="lg" label="Best opportunity" value={`-${timing.lag_hours.toFixed(1)}`} unit="h" />
+            <span className={`pill timing-${timingState(timing)}`}>
               {timing.within_band
-                ? "INSIDE THE WINDOW"
+                ? "Inside the window"
                 : timing.within_uncertainty
-                  ? "INSIDE THE MARGIN"
-                  : `${timing.offset_hours?.toFixed(1)}h BEYOND`}
+                  ? "Inside the margin"
+                  : `${timing.offset_hours?.toFixed(1)} h beyond`}
             </span>
           </div>
           {win && (
-            <p className="focus-timing-window mono muted">
+            <p className="focus-timing-window mono">
               window {win.earliest_hours_before.toFixed(0)} to {win.latest_hours_before.toFixed(0)} h
-              {win.band_uncertainty_hours != null &&
-                `, +/-${win.band_uncertainty_hours.toFixed(0)} h uncertainty`}
+              {win.band_uncertainty_hours != null && `, ±${win.band_uncertainty_hours.toFixed(0)} h uncertainty`}
             </p>
           )}
-          <p className="focus-gap-note">{timing.statement}</p>
-        </div>
+          <Disclosure label="How timing is scored">
+            <p>{timing.statement}</p>
+            {win?.timing_statement && <p className="muted">{win.timing_statement}</p>}
+          </Disclosure>
+        </section>
       )}
 
       {score && (
-        <div className="focus-score">
-          <h3 className="focus-sub">Why it scores what it does</h3>
-          {Object.entries(score.factors)
-            .sort((a, b) => b[1] - a[1])
-            .map(([name, value]) => (
-              <div className="focus-factor" key={name}>
-                <span className="focus-factor-label">{FACTOR_LABELS[name] ?? name}</span>
-                <span className={`mono focus-factor-value ${value < 0 ? "negative" : ""}`}>
-                  {value >= 0 ? "+" : ""}
-                  {value.toFixed(3)}
-                </span>
-              </div>
-            ))}
-          <p className="focus-narrative">{score.narrative}</p>
-        </div>
+        <section className="panel-section">
+          <h3 className="section-title">What the scoring made of it</h3>
+          <Stat size="hero" label="Total score" value={score.total.toFixed(2)} tone={role === "culprit" ? "suspect" : "default"} />
+          <FactorBars factors={score.factors} />
+          {vessel.integrity_flags && vessel.integrity_flags.length > 0 && (
+            <ul className="flag-list">
+              {vessel.integrity_flags.map((flag, i) => (
+                <li key={`${flag.kind}-${i}`}>
+                  <span className="mono">{flag.kind}</span> {flag.detail}
+                </li>
+              ))}
+            </ul>
+          )}
+          <Disclosure label="In plain words">
+            <p>{score.narrative}</p>
+          </Disclosure>
+        </section>
       )}
     </section>
   );

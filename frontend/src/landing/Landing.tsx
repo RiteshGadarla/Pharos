@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ArrowRight, Play, VolumeX, Waves } from 'lucide-react';
+import { ArrowRight, Play, VolumeX } from 'lucide-react';
 
 import './landing.css';
 
@@ -98,7 +98,7 @@ export default function Landing() {
 
       <section className="hero">
         <div className="hero-brand">
-          <Waves className="hero-brand-mark" size={46} strokeWidth={1.4} aria-hidden="true" />
+          <img className="hero-brand-mark" src="/brand/drishta-mark-256.png" width={64} height={64} alt="" />
           <div className="hero-brand-text">
             <strong>DRISHTA</strong>
             <span>MARITIME INTELLIGENCE</span>
@@ -145,7 +145,7 @@ export default function Landing() {
       <footer className="bottombar">
         <div className="footer-left">
           <b>
-            <Waves size={13} strokeWidth={1.8} aria-hidden="true" />
+            <img className="footer-brand-mark" src="/brand/drishta-mark-256.png" width={18} height={18} alt="" />
             DRISHTA
           </b>
           <span />

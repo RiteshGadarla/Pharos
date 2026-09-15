@@ -28,6 +28,14 @@ export type TimelineMode = "none" | "backward" | "full";
 
 export type SidePanel = "scene" | "drift" | "attribution";
 
+// One number from the bundle and what it counts, for the rail. The
+// answer sentence says the same thing in prose; the facts are what a
+// room can read from the back of it.
+export interface StageFact {
+  value: string;
+  label: string;
+}
+
 export interface Stage {
   key: StageKey;
   ordinal: number;
@@ -39,6 +47,7 @@ export interface Stage {
   // The claim, filled from the bundle's own numbers. Never hardcoded
   // prose about what the demo "would" show.
   answer: (bundle: DemoBundle) => string;
+  facts: (bundle: DemoBundle) => StageFact[];
   layers: LayerToggles;
   view: ViewKey;
   timeline: TimelineMode;
@@ -106,6 +115,23 @@ export const STAGES: Stage[] = [
         `Wind at the slick was ${wind} m/s, so the wind gate returned ${gate?.verdict ?? "no verdict"}.`
       );
     },
+    facts: (b) => {
+      const primary = b.detections.find((d) => d.detection_id === b.primary_detection_id);
+      const w = b.origin_window;
+      const facts: StageFact[] = [
+        { value: `${formatUtc(b.scene.acquired_at)} UTC`, label: "acquired" },
+        { value: String(b.detections.length), label: b.detections.length === 1 ? "candidate" : "candidates" },
+        { value: `${b.slick_features.area_km2.toFixed(2)} km²`, label: "primary slick" },
+        {
+          value: w ? `${w.earliest_hours_before.toFixed(0)} to ${w.latest_hours_before.toFixed(0)} h` : b.slick_features.age_band,
+          label: w ? `old, ${b.slick_features.age_band}` : "age band",
+        },
+      ];
+      if (primary) {
+        facts.push({ value: `${primary.gate.wind_speed_ms.toFixed(1)} m/s`, label: `wind, gate ${primary.gate.verdict}` });
+      }
+      return facts;
+    },
     layers: { ...ALL_OFF, scene: true, detections: true },
     view: "scene",
     timeline: "none",
@@ -129,6 +155,17 @@ export const STAGES: Stage[] = [
         `The result is a probability of origin over space and time that sums to 1 and is never ` +
         `collapsed to a single point.${forwardClause}`
       );
+    },
+    facts: (b) => {
+      const facts: StageFact[] = [
+        { value: String(b.origin_field.n_members), label: `${b.origin_field.kernel ?? "drift"} members` },
+        { value: `${Math.round(backwardHours(b))} h`, label: "run backwards" },
+      ];
+      if (b.forecast_field) {
+        facts.push({ value: `${Math.round(forwardHours(b))} h`, label: "forecast, never ranked" });
+      }
+      facts.push({ value: "Σ = 1", label: "a probability field, never a point" });
+      return facts;
     },
     // The forcing comes on here and nowhere else by default. This is
     // the stage that asks where the oil went, and the wind and current
@@ -174,6 +211,17 @@ export const STAGES: Stage[] = [
         `${darkCount} that stopped broadcasting, showing the reconstruction rather than an observation. ` +
         `Click any vessel to follow it alone.`
       );
+    },
+    facts: (b) => {
+      const top = b.suspects[0];
+      const facts: StageFact[] = [
+        { value: String(b.suspects.length + b.eliminations.length), label: "vessels in the window" },
+        { value: String(b.eliminations.length), label: "eliminated, with reasons" },
+        { value: String(b.suspects.length), label: "survive" },
+      ];
+      if (top) facts.push({ value: top.mmsi, label: `ranks first at ${top.total.toFixed(2)}` });
+      facts.push({ value: (b.verdict?.verdict ?? "RANKED").replace("_", " "), label: "verdict" });
+      return facts;
     },
     // Forcing off: the attribution stage already carries tracks,
     // envelopes, radar targets and a probability field, and arrows on
