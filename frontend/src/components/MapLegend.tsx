@@ -101,20 +101,28 @@ function rowsFor(t: LayerToggles, hasForecast: boolean, hasForcing: boolean): Ro
       {
         sample: "dot",
         color: COLORS.suspect,
-        label: "Rank 1 suspect",
-        meaning: "Highest scoring vessel. A ranking, not an identification.",
+        label: "Rank 1",
+        meaning:
+          "Highest scoring survivor. A ranking, not an identification. Each of the top three keeps its own colour, so a track can be matched to its row in the list on sight.",
+      },
+      {
+        sample: "dot",
+        color: COLORS.suspect2,
+        label: "Rank 2",
+        meaning: "Second highest scoring survivor.",
+      },
+      {
+        sample: "dot",
+        color: COLORS.suspect3,
+        label: "Rank 3",
+        meaning: "Third highest scoring survivor.",
       },
       {
         sample: "dot",
         color: COLORS.muted,
-        label: "Other survivor",
-        meaning: "Still a candidate, scored below rank 1.",
-      },
-      {
-        sample: "dot",
-        color: COLORS.cleared,
-        label: "Eliminated",
-        meaning: "Ruled out by a stated rule. Hover the track for the written reason.",
+        label: "Every other vessel",
+        meaning:
+          "Gets its own colour too, generated rather than hand-picked, so tracks that cross in a cluster can still be told apart without hovering each one. Hover any dot for whether it survived or was eliminated, and why.",
       },
       {
         sample: "hollow-dot",

@@ -20,13 +20,13 @@ import {
   isDarkGapActive,
   rankOf,
   reportedSegments,
-  vesselRole,
   vesselSummary,
 } from "../lib/vessel";
 import { fieldRasterBounds, fieldSliceMax, fieldSliceToCanvas } from "../lib/fieldRaster";
 import { buildGraticule } from "../lib/graticule";
 import { frameField, type TimelineFrame } from "../lib/timeline";
 import { COLORS, hexToRgb } from "../lib/tokens";
+import { buildVesselColors, RANK_RGB } from "../lib/vesselColors";
 import type { DemoBundle, ShipTargetJSON, VesselJSON } from "../types";
 
 const BLANK_STYLE: maplibregl.StyleSpecification = {
@@ -36,8 +36,6 @@ const BLANK_STYLE: maplibregl.StyleSpecification = {
 };
 
 const OIL_RGB = hexToRgb(COLORS.oil);
-const SUSPECT_RGB = hexToRgb(COLORS.suspect);
-const CLEARED_RGB = hexToRgb(COLORS.cleared);
 const MUTED_RGB = hexToRgb(COLORS.muted);
 const PAPER_RGB = hexToRgb(COLORS.paper);
 const GRATICULE_RGB = hexToRgb(COLORS.graticule);
@@ -66,7 +64,7 @@ interface LabelCandidate {
 // and needs no redraw when the camera eases between presets.
 function stackLabels(
   items: LabelCandidate[],
-  view: { bounds: Bounds; padding: FitPadding; width: number; height: number; selectedMmsi: string | null },
+  view: { bounds: Bounds; padding: FitPadding; width: number; height: number; focusMmsi: string | null },
 ): Map<string, number> {
   const rows = new Map<string, number>();
   const w = view.width - view.padding.left - view.padding.right;
@@ -82,15 +80,15 @@ function stackLabels(
   const midX = (((east + west) / 2) * Math.PI) / 180;
   const midY = (mercY(north) + mercY(south)) / 2;
 
-  const priority = (d: LabelCandidate) => (d.vessel.mmsi === view.selectedMmsi ? -1 : (d.rank ?? 1000));
+  const priority = (d: LabelCandidate) => (d.vessel.mmsi === view.focusMmsi ? -1 : (d.rank ?? 1000));
   const placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
   for (const d of [...items].sort((a, b) => priority(a) - priority(b))) {
     const x = cx + ((d.pos[0] * Math.PI) / 180 - midX) * scale + 12;
     const y = cy - (mercY(d.pos[1]) - midY) * scale + 6;
     const text = d.rank ? `#${d.rank}  ${d.vessel.mmsi}` : d.vessel.mmsi;
-    // Matches the label sizes below: 16 px for the selected vessel, 13
+    // Matches the label sizes below: 16 px for the vessel in focus, 13
     // for the rest, in a monospace face with its background padding.
-    const size = d.vessel.mmsi === view.selectedMmsi ? 16 : 13;
+    const size = d.vessel.mmsi === view.focusMmsi ? 16 : 13;
     const boxW = text.length * size * 0.62 + 10;
     const boxH = size + 8;
     let shift = 0;
@@ -125,24 +123,40 @@ export interface LayerToggles {
 }
 
 
-function vesselColor(vessel: VesselJSON, culpritMmsi: string | null): [number, number, number] {
-  const role = vesselRole(vessel, culpritMmsi);
-  if (role === "eliminated") return CLEARED_RGB;
-  if (role === "culprit") return SUSPECT_RGB;
-  return MUTED_RGB;
+// How strongly to draw a vessel given which one the room is looking at.
+//
+// Exactly one vessel is "in focus" at a time: whatever is selected, else
+// whatever is hovered, else the top-ranked suspect by default. With
+// fifteen background tracks, two envelopes and a probability field on
+// screen at once, drawing them all at equal strength is not neutral, it
+// is unreadable — nobody can follow a single ship through that. Taking
+// every other vessel down and to a dashed line rather than a thinner
+// solid one is what makes the one in focus legible; but "down" stops
+// well short of invisible; a dotted line nobody can actually see is not
+// de-emphasised, it has been hidden, and every one of these vessels is a
+// hover or a click away from taking the focused vessel's place.
+function vesselAlpha(mmsi: string, focus: string | null): number {
+  if (!focus) return 215;
+  return mmsi === focus ? 255 : 150;
 }
 
-// How strongly to draw a vessel given what is selected.
-//
-// Selecting one vessel dims the rest hard rather than merely
-// highlighting the chosen one. With five tracks, two envelopes and a
-// probability field on screen at once, a highlight is lost; taking the
-// others down to a fifth is what actually isolates the one being
-// discussed, and every one of them is a click away from coming back.
-function vesselAlpha(mmsi: string, selected: string | null, hovered: string | null): number {
-  if (!selected) return mmsi === hovered ? 255 : 215;
-  if (mmsi === selected) return 255;
-  return 55;
+// Text stays readable even when the line under it fades: a rank badge
+// dimmed to the same weight as its track is not "de-emphasised", it is
+// gone. Only the vessel in focus gets full strength.
+function labelAlpha(mmsi: string, focus: string | null): number {
+  if (!focus) return 220;
+  return mmsi === focus ? 255 : 165;
+}
+
+// Solid for the vessel in focus, a clearly dotted line for everyone
+// else. Fed to PathStyleExtension's getDashArray: a zero gap is a solid
+// line. The dash is sized to still read at a glance once its own colour
+// and alpha are doing real work distinguishing it from its neighbours,
+// not shrunk down to the thinnest mark that technically counts as
+// dashed.
+function vesselDash(mmsi: string, focus: string | null): [number, number] {
+  if (!focus || mmsi === focus) return [1, 0];
+  return [2, 2];
 }
 
 function gateFillColor(verdict: string): [number, number, number, number] {
@@ -421,6 +435,24 @@ export default function MapView({
     }
 
     if (toggles.traffic) {
+      // Exactly one vessel is in focus at a time: whatever is selected,
+      // else whatever is hovered, else the top-ranked suspect by
+      // default. The map never opens on all fifteen-plus tracks drawn
+      // at equal weight — that reads as a smear, not a case. See
+      // vesselAlpha and vesselDash just above.
+      const focusMmsi = selectedMmsi ?? hoveredMmsi ?? bundle.suspects[0]?.mmsi ?? null;
+
+      // Every vessel's colour, shared with the vessel table so a track
+      // and its row always match: see lib/vesselColors.ts.
+      const vesselColors = buildVesselColors(bundle);
+      const focusColor = focusMmsi ? (vesselColors.get(focusMmsi) ?? RANK_RGB[0]) : RANK_RGB[0];
+
+      // Drawn back to front, so the vessel in focus paints over the
+      // dimmed tracks around it rather than sitting underneath one.
+      const orderedVessels = [...bundle.vessels].sort(
+        (a, b) => Number(a.mmsi === focusMmsi) - Number(b.mmsi === focusMmsi),
+      );
+
       // Reported track and dark run are built as separate layers with
       // separate styling, because the difference between them is the
       // most important thing on this map. A solid line is a position the
@@ -432,7 +464,7 @@ export default function MapView({
       const envelopeFeatures: GeoJSON.Feature[] = [];
       const darkMarkers: { pos: [number, number]; mmsi: string; reachKm: number; mins: number }[] = [];
 
-      for (const vessel of bundle.vessels) {
+      for (const vessel of orderedVessels) {
         for (const seg of reportedSegments(vessel)) {
           reported.push({ path: seg, mmsi: vessel.mmsi });
         }
@@ -445,12 +477,11 @@ export default function MapView({
             mins: gap.duration_min,
           });
           // The envelope is the largest thing on the map and it swamped
-          // everything when every vessel showed one at once. With a
-          // vessel selected only that vessel's is drawn; with none
-          // selected they are all drawn faintly, so the room can see
-          // there are several before being shown one.
-          const dimmed = selectedMmsi !== null && selectedMmsi !== vessel.mmsi;
-          if (dimmed) continue;
+          // everything when every vessel showed one at once. Only the
+          // vessel in focus draws one, so hovering a row previews that
+          // vessel's reach without every other envelope competing for
+          // the same pixels.
+          if (vessel.mmsi !== focusMmsi) continue;
           envelopeFeatures.push({
             type: "Feature",
             geometry: gap.envelope,
@@ -459,45 +490,43 @@ export default function MapView({
               kind: "dark-envelope",
               mins: Math.round(gap.duration_min),
               reachKm: Math.round(darkReachKm(gap)),
-              focused: selectedMmsi === vessel.mmsi,
             },
           });
         }
       }
 
-      const envelopeAlpha = selectedMmsi ? 44 : 20;
       layers.push(
         new GeoJsonLayer({
           id: "dark-envelopes",
           data: { type: "FeatureCollection", features: envelopeFeatures } as any,
           filled: true,
           stroked: true,
-          getFillColor: [...SUSPECT_RGB, envelopeAlpha],
-          getLineColor: (f: any) => [...SUSPECT_RGB, f.properties.focused ? 220 : 120],
+          getFillColor: [...focusColor, 44],
+          getLineColor: [...focusColor, 220],
           lineWidthMinPixels: 2,
           getDashArray: [4, 3],
           dashJustified: true,
           extensions: [new PathStyleExtension({ dash: true })],
           pickable: true,
-          updateTriggers: { getFillColor: [selectedMmsi], getLineColor: [selectedMmsi] },
+          updateTriggers: { getFillColor: [focusColor], getLineColor: [focusColor] },
         }),
         new PathLayer({
           id: "ais-tracks",
           data: reported,
           getPath: (d) => d.path,
-          getColor: (d) => {
-            const v = bundle.vessels.find((x) => x.mmsi === d.mmsi)!;
-            return [...vesselColor(v, bundle.culprit_mmsi), vesselAlpha(d.mmsi, selectedMmsi, hoveredMmsi)];
-          },
-          getWidth: (d) =>
-            d.mmsi === selectedMmsi ? 4 : d.mmsi === bundle.culprit_mmsi ? 3 : 2,
-          widthMinPixels: 2,
+          getColor: (d) => [...vesselColors.get(d.mmsi)!, vesselAlpha(d.mmsi, focusMmsi)],
+          getWidth: (d) => (d.mmsi === focusMmsi ? 3 : 1.8),
+          widthMinPixels: 1.8,
+          getDashArray: (d) => vesselDash(d.mmsi, focusMmsi),
+          dashJustified: true,
+          extensions: [new PathStyleExtension({ dash: true })],
           pickable: true,
           onHover: (info) => onHoverVessel(info.object ? info.object.mmsi : null),
           onClick: (info) => onSelectVessel(info.object ? info.object.mmsi : null),
           updateTriggers: {
-            getColor: [hoveredMmsi, selectedMmsi],
-            getWidth: [selectedMmsi],
+            getColor: [focusMmsi],
+            getWidth: [focusMmsi],
+            getDashArray: [focusMmsi],
           },
         }),
         new PathLayer({
@@ -505,20 +534,21 @@ export default function MapView({
           data: reckoned,
           getPath: (d) => d.path,
           // Cream, not the vessel's own colour. It sits inside the
-          // red-tinted envelope, where red dashes are invisible, and it
-          // is an annotation on the chart rather than a measurement on
-          // it: this line is what the system inferred, and it should not
-          // be drawn in the same ink as what the vessel reported.
-          getColor: (d) => [...PAPER_RGB, vesselAlpha(d.mmsi, selectedMmsi, hoveredMmsi)],
-          getWidth: (d) => (d.mmsi === selectedMmsi ? 3 : 2),
-          widthMinPixels: 2,
+          // envelope, tinted in that same colour, where a dash in it
+          // would be invisible, and it is an annotation on the chart
+          // rather than a measurement on it: this line is what the
+          // system inferred, and it should not be drawn in the same ink
+          // as what the vessel reported.
+          getColor: (d) => [...PAPER_RGB, vesselAlpha(d.mmsi, focusMmsi)],
+          getWidth: (d) => (d.mmsi === focusMmsi ? 3 : 1.8),
+          widthMinPixels: 1.8,
           getDashArray: [3, 3],
           dashJustified: true,
           extensions: [new PathStyleExtension({ dash: true })],
           pickable: true,
           onHover: (info) => onHoverVessel(info.object ? info.object.mmsi : null),
           onClick: (info) => onSelectVessel(info.object ? info.object.mmsi : null),
-          updateTriggers: { getColor: [hoveredMmsi, selectedMmsi], getWidth: [selectedMmsi] },
+          updateTriggers: { getColor: [focusMmsi], getWidth: [focusMmsi] },
         }),
         // A question mark at the point of maximum ignorance: furthest in
         // time from the last reported position and the next one. It is
@@ -528,7 +558,7 @@ export default function MapView({
           data: darkMarkers,
           getPosition: (d) => d.pos,
           getText: () => "?",
-          getColor: (d) => [...PAPER_RGB, vesselAlpha(d.mmsi, selectedMmsi, hoveredMmsi)],
+          getColor: (d) => [...PAPER_RGB, vesselAlpha(d.mmsi, focusMmsi)],
           getSize: 15,
           fontFamily: '"IBM Plex Mono", monospace',
           fontWeight: 700,
@@ -536,7 +566,7 @@ export default function MapView({
           getAlignmentBaseline: "center",
           pickable: true,
           onHover: (info) => onHoverVessel(info.object ? info.object.mmsi : null),
-          updateTriggers: { getColor: [hoveredMmsi, selectedMmsi] },
+          updateTriggers: { getColor: [focusMmsi] },
         }),
       );
 
@@ -550,17 +580,28 @@ export default function MapView({
         }))
         .filter((d): d is typeof d & { pos: [number, number] } => d.pos !== null);
 
-      // Vessels close together at one instant would otherwise print their
-      // MMSIs over each other into an unreadable smear. Labels are placed
-      // in priority order (the selected vessel, then by rank, then the
-      // eliminated) and any that would land on one already placed drops
-      // a row. Nothing is hidden: every vessel keeps its label.
-      const labelRows = stackLabels(positions, {
+      // A scene can carry a dozen or more background vessels that were
+      // never in contention, and printing every one of their MMSIs at
+      // once turns the cluster around the origin field into a smear no
+      // one can read. Nothing is hidden: every vessel keeps its dot and
+      // its hover tooltip. Only the *label text* is limited to the
+      // vessels the case is actually about — the ranked survivors, plus
+      // whichever one the room is currently pointing at — and hovering
+      // or selecting any other vessel adds it to the labeled set on the
+      // spot.
+      const labeled = positions.filter(
+        (d) => d.rank !== null || d.vessel.mmsi === focusMmsi,
+      );
+
+      // Even this smaller set can still collide close together. Labels
+      // are placed in priority order (the vessel in focus, then by rank)
+      // and any that would land on one already placed drops a row.
+      const labelRows = stackLabels(labeled, {
         bounds: viewBounds,
         padding: fitPadding,
         width: containerRef.current?.clientWidth ?? 0,
         height: containerRef.current?.clientHeight ?? 0,
-        selectedMmsi,
+        focusMmsi,
       });
 
       layers.push(
@@ -574,24 +615,22 @@ export default function MapView({
           filled: true,
           getFillColor: (d) =>
             d.dark
-              ? [...hexToRgb(COLORS.ink), vesselAlpha(d.vessel.mmsi, selectedMmsi, hoveredMmsi)]
-              : [...vesselColor(d.vessel, bundle.culprit_mmsi), vesselAlpha(d.vessel.mmsi, selectedMmsi, hoveredMmsi)],
+              ? [...hexToRgb(COLORS.ink), vesselAlpha(d.vessel.mmsi, focusMmsi)]
+              : [...vesselColors.get(d.vessel.mmsi)!, vesselAlpha(d.vessel.mmsi, focusMmsi)],
           stroked: true,
-          getLineColor: (d) => [
-            ...vesselColor(d.vessel, bundle.culprit_mmsi),
-            vesselAlpha(d.vessel.mmsi, selectedMmsi, hoveredMmsi),
-          ],
+          getLineColor: (d) => [...vesselColors.get(d.vessel.mmsi)!, vesselAlpha(d.vessel.mmsi, focusMmsi)],
           getLineWidth: 2,
           lineWidthMinPixels: 2,
-          getRadius: (d) => (d.vessel.mmsi === bundle.culprit_mmsi ? 60 : 40),
+          getRadius: (d) => (d.vessel.mmsi === focusMmsi ? 60 : 40),
           radiusMinPixels: 5,
           radiusMaxPixels: 13,
           pickable: true,
           onHover: (info) => onHoverVessel(info.object ? info.object.vessel.mmsi : null),
           onClick: (info) => onSelectVessel(info.object ? info.object.vessel.mmsi : null),
           updateTriggers: {
-            getFillColor: [hoveredMmsi, selectedMmsi, timeMs],
-            getLineColor: [hoveredMmsi, selectedMmsi],
+            getFillColor: [focusMmsi, timeMs],
+            getLineColor: [focusMmsi],
+            getRadius: [focusMmsi],
           },
         }),
         // Heading, from the vessel's own reported course, so the eye can
@@ -604,15 +643,12 @@ export default function MapView({
           getPosition: (d) => d.pos,
           getText: () => "\u25B2",
           getAngle: (d) => -(d.heading ?? 0),
-          getColor: (d) => [
-            ...vesselColor(d.vessel, bundle.culprit_mmsi),
-            vesselAlpha(d.vessel.mmsi, selectedMmsi, hoveredMmsi),
-          ],
+          getColor: (d) => [...vesselColors.get(d.vessel.mmsi)!, vesselAlpha(d.vessel.mmsi, focusMmsi)],
           getSize: 13,
           getPixelOffset: [0, -16],
           getTextAnchor: "middle",
           getAlignmentBaseline: "center",
-          updateTriggers: { getColor: [hoveredMmsi, selectedMmsi], getAngle: [timeMs] },
+          updateTriggers: { getColor: [focusMmsi], getAngle: [timeMs] },
         }),
         // The MMSI, on the map, next to the vessel. Without it the
         // ranked list on the right and the lines on the left are two
@@ -620,14 +656,14 @@ export default function MapView({
         // which out loud.
         new TextLayer({
           id: "vessel-labels",
-          data: positions,
+          data: labeled,
           getPosition: (d) => d.pos,
           getText: (d) => (d.rank ? `#${d.rank}  ${d.vessel.mmsi}` : d.vessel.mmsi),
           getColor: (d) => [
-            ...(d.vessel.mmsi === selectedMmsi ? PAPER_RGB : vesselColor(d.vessel, bundle.culprit_mmsi)),
-            vesselAlpha(d.vessel.mmsi, selectedMmsi, hoveredMmsi),
+            ...(d.vessel.mmsi === focusMmsi ? PAPER_RGB : vesselColors.get(d.vessel.mmsi)!),
+            labelAlpha(d.vessel.mmsi, focusMmsi),
           ],
-          getSize: (d) => (d.vessel.mmsi === selectedMmsi ? 16 : 13),
+          getSize: (d) => (d.vessel.mmsi === focusMmsi ? 16 : 13),
           fontFamily: '"IBM Plex Mono", monospace',
           getTextAnchor: "start",
           getAlignmentBaseline: "top",
@@ -639,8 +675,8 @@ export default function MapView({
           onHover: (info) => onHoverVessel(info.object ? info.object.vessel.mmsi : null),
           onClick: (info) => onSelectVessel(info.object ? info.object.vessel.mmsi : null),
           updateTriggers: {
-            getColor: [hoveredMmsi, selectedMmsi],
-            getSize: [selectedMmsi],
+            getColor: [focusMmsi],
+            getSize: [focusMmsi],
             getText: [bundle],
             getPixelOffset: [labelRows],
           },

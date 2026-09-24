@@ -27,11 +27,15 @@ export default function SuspectsPanel({ bundle, hoveredMmsi, selectedMmsi, onHov
         const vessel = vesselByMmsi.get(s.mmsi);
         const isOpen = expanded === s.mmsi;
         const isFocused = s.mmsi === hoveredMmsi || s.mmsi === selectedMmsi;
-        const isCulprit = s.mmsi === bundle.culprit_mmsi;
+        // Ranks 1-3 each carry their own colour, matching the same three
+        // colours the map gives those vessels' tracks and dots, so a row
+        // here and a line there can be told apart as the same vessel on
+        // sight rather than by hovering to check.
+        const rankClass = s.rank >= 1 && s.rank <= 3 ? ` rank${s.rank}` : "";
         return (
           <div
             key={s.mmsi}
-            className={`suspect-row${isFocused ? " focused" : ""}${isCulprit ? " rank1" : ""}${isOpen ? " open" : ""}`}
+            className={`suspect-row${isFocused ? " focused" : ""}${rankClass}${isOpen ? " open" : ""}`}
             onMouseEnter={() => onHoverVessel(s.mmsi)}
             onMouseLeave={() => onHoverVessel(null)}
           >

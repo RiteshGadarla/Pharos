@@ -43,7 +43,13 @@ export default function AttributionPanel({
   if (selectedMmsi) {
     return (
       <div className="pane-scroll">
-        <VesselFocusCard bundle={bundle} mmsi={selectedMmsi} timeMs={timeMs} onClear={() => onSelectVessel(null)} />
+        <VesselFocusCard
+          bundle={bundle}
+          mmsi={selectedMmsi}
+          timeMs={timeMs}
+          onClear={() => onSelectVessel(null)}
+          onStep={onSelectVessel}
+        />
       </div>
     );
   }
@@ -86,7 +92,7 @@ export default function AttributionPanel({
         )}
         {active === "eliminations" && (
           <>
-            <EliminationLog bundle={bundle} onFocusVessel={onSelectVessel} />
+            <EliminationLog bundle={bundle} onFocusVessel={onSelectVessel} onHoverVessel={onHoverVessel} />
             <div className="panel-accordions">
               <Accordion title="Ledgers across runs">
                 <LedgerTables />

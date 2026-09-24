@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import Disclosure from "./Disclosure";
 import FactorBars from "./FactorBars";
 import Stat from "./Stat";
@@ -10,6 +10,16 @@ interface Props {
   mmsi: string;
   timeMs: number;
   onClear: () => void;
+  // Moves the focus to the previous or next vessel without returning to
+  // the case list first. Every vessel in the window is reachable this
+  // way, ranked survivors first and then the eliminated in the order
+  // they were cleared, so stepping through the whole traffic picture one
+  // ship at a time never requires finding a specific dot on the map.
+  onStep: (mmsi: string) => void;
+}
+
+function stepOrder(bundle: DemoBundle): string[] {
+  return [...bundle.suspects.map((s) => s.mmsi), ...bundle.eliminations.map((e) => e.mmsi)];
 }
 
 // One vessel's whole story, shown when it is clicked on the map. It takes
@@ -21,7 +31,7 @@ interface Props {
 // scoring made of that. The score comes last on purpose. Leading with a
 // number invites the room to argue with the number instead of with the
 // behaviour that produced it.
-export default function VesselFocusCard({ bundle, mmsi, timeMs, onClear }: Props) {
+export default function VesselFocusCard({ bundle, mmsi, timeMs, onClear, onStep }: Props) {
   const vessel = bundle.vessels.find((v) => v.mmsi === mmsi);
   if (!vessel) return null;
 
@@ -36,6 +46,11 @@ export default function VesselFocusCard({ bundle, mmsi, timeMs, onClear }: Props
   const first = vessel.points[0];
   const last = vessel.points[vessel.points.length - 1];
 
+  const order = stepOrder(bundle);
+  const at = order.indexOf(mmsi);
+  const prevMmsi = at >= 0 && order.length > 1 ? order[(at - 1 + order.length) % order.length] : null;
+  const nextMmsi = at >= 0 && order.length > 1 ? order[(at + 1) % order.length] : null;
+
   return (
     <section className={`focus-card role-${role}`}>
       <div className="focus-bar">
@@ -43,6 +58,29 @@ export default function VesselFocusCard({ bundle, mmsi, timeMs, onClear }: Props
           <ArrowLeft size={16} strokeWidth={1.8} aria-hidden="true" />
           Back to the case
         </button>
+        <div className="focus-step">
+          <button
+            className="focus-step-button"
+            onClick={() => prevMmsi && onStep(prevMmsi)}
+            disabled={!prevMmsi}
+            title="Previous vessel"
+          >
+            <ChevronLeft size={16} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+          {at >= 0 && (
+            <span className="focus-step-count mono">
+              {at + 1} / {order.length}
+            </span>
+          )}
+          <button
+            className="focus-step-button"
+            onClick={() => nextMmsi && onStep(nextMmsi)}
+            disabled={!nextMmsi}
+            title="Next vessel"
+          >
+            <ChevronRight size={16} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+        </div>
         <span className={`pill status-${role}`}>
           {role === "eliminated" ? "Eliminated" : `Rank ${rank ?? "?"} of ${bundle.suspects.length}`}
         </span>

@@ -32,6 +32,10 @@
   --paper: #e9e3d2;
   --oil: #f2a03d;
   --suspect: #d6455e;
+  /* Rank 2 and 3 survivors. See the comment on COLORS.suspect2 in
+     lib/tokens.ts for how these were picked and validated. */
+  --suspect-2: #3987e5;
+  --suspect-3: #a6961a;
   --cleared: #4e7c6b;
   --radar: #7fb2c4;
   --forecast: #b08cc7;
@@ -1049,6 +1053,147 @@ p {
   background: none;
   border-top: 3px solid var(--wind);
   height: 3px;
+}
+
+/* ---------------------------------------------------------------
+   Vessel table (components/VesselTable.tsx)
+   Same behind-a-button pattern as .layer-toggles just beside it, wider
+   because a table needs the room a checklist does not.
+   --------------------------------------------------------------- */
+.vessel-table {
+  position: relative;
+}
+
+.vessel-table.is-open .map-tool-button {
+  border-color: var(--cyan);
+  color: var(--text);
+}
+
+.vessel-table-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 420px;
+  max-height: 400px;
+  display: flex;
+  flex-direction: column;
+  background: #041822;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.5);
+  /* Not overflow:hidden: the hover popover on each row (below) opens to
+     the left of this panel and would be clipped by it. */
+}
+
+.vessel-table-head,
+.vessel-table-row {
+  display: grid;
+  grid-template-columns: 24px 12px 92px 1fr 82px;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+.vessel-table-head {
+  flex-shrink: 0;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.vessel-table-rows {
+  overflow-y: auto;
+  /* overflow-y: auto alone computes overflow-x as auto too (the classic
+     CSS quirk), which would clip the row hover popover below. Force it
+     back to visible so vertical scrolling doesn't cost horizontal. */
+  overflow-x: visible;
+}
+
+.vessel-table-row {
+  position: relative;
+  padding: 7px var(--sp-3) 7px 9px;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.vessel-table-row:last-child {
+  border-bottom: 0;
+}
+
+.vessel-table-row:hover,
+.vessel-table-row.focused {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.vt-col-num {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+.vt-col-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.vt-col-mmsi {
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+
+.vt-col-type {
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vt-col-status {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.vt-col-status .pill {
+  height: 20px;
+  padding: 0 7px;
+  font-size: 10px;
+}
+
+/* The hover box: whatever extra this vessel has beyond its row. Portaled
+   to <body> and positioned in fixed coordinates by VesselTable.tsx from
+   the hovered row's own bounding box, rather than living inside the row
+   as an absolutely positioned child: the row list scrolls, and a
+   scrolling ancestor clips a sideways-escaping descendant no matter what
+   overflow-x is set to on it. */
+.vessel-row-popover {
+  position: fixed;
+  padding: var(--sp-3);
+  background: #041822;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  z-index: 60;
+  pointer-events: none;
+}
+
+.vessel-row-popover p {
+  margin: 0 0 6px;
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.vessel-row-popover p:last-child {
+  margin-bottom: 0;
 }
 
 /* ---------------------------------------------------------------
@@ -2416,6 +2561,14 @@ p {
   border-left-color: var(--suspect);
 }
 
+.suspect-row.rank2 {
+  border-left-color: var(--suspect-2);
+}
+
+.suspect-row.rank3 {
+  border-left-color: var(--suspect-3);
+}
+
 .suspect-row.focused {
   background: rgba(25, 207, 255, 0.05);
 }
@@ -2475,6 +2628,14 @@ p {
 
 .suspect-row.rank1 .suspect-bar-fill {
   background: var(--suspect);
+}
+
+.suspect-row.rank2 .suspect-bar-fill {
+  background: var(--suspect-2);
+}
+
+.suspect-row.rank3 .suspect-bar-fill {
+  background: var(--suspect-3);
 }
 
 .suspect-total {
@@ -2656,9 +2817,10 @@ p {
 
 .focus-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--sp-3);
+  gap: var(--sp-2) var(--sp-3);
   padding: var(--sp-4) var(--sp-6) 0 calc(var(--sp-6) - 3px);
 }
 
@@ -2673,12 +2835,51 @@ p {
   border-radius: 8px;
   color: var(--text-2);
   font-size: var(--fs-sm);
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .back-button:hover {
   color: var(--text);
   border-color: var(--cyan);
+}
+
+.focus-step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+
+.focus-step-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.focus-step-button:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--cyan);
+}
+
+.focus-step-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.focus-step-count {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  min-width: 3.5em;
+  text-align: center;
 }
 
 .focus-hero {

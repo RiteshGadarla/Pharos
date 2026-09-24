@@ -20,6 +20,7 @@ import DriftPanel from "./components/DriftPanel";
 import ScenePanel from "./components/ScenePanel";
 import StageRail from "./components/StageRail";
 import TimeScrubber from "./components/TimeScrubber";
+import VesselTable from "./components/VesselTable";
 import ViewPresets from "./components/ViewPresets";
 import { useViewPresets, type ViewKey } from "./lib/views";
 import { STAGES, stageAt } from "./lib/stages";
@@ -347,6 +348,15 @@ function Console({ bundle, activeCase, casesSource, caseSwitcher }: ConsoleProps
           <div className="map-corner top-right">
             <ViewPresets presets={presets} active={viewKey} onSelect={setViewKey} />
             <LayerToggles toggles={toggles} onChange={setToggles} bundle={bundle} />
+            {toggles.traffic && (
+              <VesselTable
+                bundle={bundle}
+                hoveredMmsi={hoveredMmsi}
+                selectedMmsi={selectedMmsi}
+                onHoverVessel={setHoveredMmsi}
+                onSelectVessel={setSelectedMmsi}
+              />
+            )}
           </div>
           <div className="map-corner bottom-left">
             <MapLegend
