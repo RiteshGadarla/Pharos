@@ -134,13 +134,13 @@ export default function Landing() {
       <IntelligencePanel />
 
       {/* Covers the generator's watermark in the corner of the video. */}
-      <div className="video-credit">
+      {/* <div className="video-credit">
         <div className="video-credit-line" />
         <div className="video-credit-content">
           <span>DRISHTA</span>
           <small>EARTH OBSERVATION SYSTEM</small>
         </div>
-      </div>
+      </div> */}
 
       <footer className="bottombar">
         <div className="footer-left">
