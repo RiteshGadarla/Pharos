@@ -1,5 +1,5 @@
 /* ================================================================
-   DRISHTA, operator console (/run)
+   Pharos, operator console (/run)
    Only loaded on /run. The landing page has its own stylesheet, and
    the two share class names, so never import this one from there.
    ================================================================ */
@@ -171,7 +171,7 @@ p {
 }
 
 .loading::before {
-  content: "DRISHTA · MARITIME INTELLIGENCE";
+  content: "PHAROS · MARITIME INTELLIGENCE";
   color: var(--cyan);
   letter-spacing: 0.18em;
   font-size: var(--fs-xs);

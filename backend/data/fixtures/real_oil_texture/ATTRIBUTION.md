@@ -7,7 +7,7 @@ Dataset** by bitsandlayers, Kaggle:
 
 Licensed **CC BY 4.0** (Attribution 4.0 International). Real Sentinel-1A
 imagery over the Persian Gulf, not the Arabian Sea and not the
-DRISHTA demo's own illustrative scene location.
+Pharos demo's own illustrative scene location.
 
 - `sentinel_277_image.png` / `sentinel_277_label.png`
 

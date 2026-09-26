@@ -7,7 +7,7 @@ tests/test_no_cerulean_in_services.py enforces that by scanning the
 source tree. If you find yourself wanting a Cerulean call inside a
 pipeline stage, the answer is no: the demo must run with the network
 cable unplugged, and an external system's operating point must not leak
-into DRISHTA's own claims.
+into Pharos's own claims.
 
 The public read API is an OGC API Features service served by tipg at
 api.cerulean.skytruth.org. That tipg service does not require the
@@ -69,13 +69,13 @@ ATTRIBUTION = (
 
 # What Cerulean's operating point is, stated wherever a comparison is
 # reported. Their production model runs Sentinel-1 VV scaled to 80 m
-# resolution on 512x512 tiles for global throughput; DRISHTA runs at
+# resolution on 512x512 tiles for global throughput; Pharos runs at
 # full GRD resolution on a single scene. Two systems at different
 # operating points will disagree, and that disagreement is not error on
 # either side.
 OPERATING_POINT_NOTE = (
     "Cerulean's production model runs on Sentinel-1 VV scaled to 80 m resolution with "
-    "512x512 tiles, sized for global throughput. DRISHTA runs at full GRD resolution on a "
+    "512x512 tiles, sized for global throughput. Pharos runs at full GRD resolution on a "
     "single scene. Disagreement between two systems at different operating points is "
     "expected and is not error on either side."
 )
@@ -232,7 +232,7 @@ def fetch_dark_sources(
     association considers only long linear detections and nearby
     broadcasting vessels, and their AIS carries a delay of up to 72
     hours, so a record here is a slick their pipeline could not tie to
-    anyone who was transmitting. That is exactly the gap DRISHTA
+    anyone who was transmitting. That is exactly the gap Pharos
     targets, and each record carries a slick_url that opens the case in
     their UI beside the Sentinel-1 image.
     """

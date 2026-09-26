@@ -255,7 +255,7 @@ def figure_4_scoring_table(bundle: dict) -> str:
     vessel_type = {v["mmsi"]: v["vessel_type"] for v in bundle["vessels"]}
 
     lines = [
-        f"DRISHTA  case {bundle['case_id']}",
+        f"PHAROS  case {bundle['case_id']}",
         f"verdict  {bundle.get('verdict', {}).get('verdict', 'n/a')}",
         "",
         "RANKED SUSPECTS",

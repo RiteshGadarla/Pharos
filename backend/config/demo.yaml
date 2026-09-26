@@ -20,10 +20,10 @@
 # so running a synthetic attribution pipeline against it would look like
 # inventing a culprit for a solved case). Instead source_reference below
 # grounds *why this matters* in real documented Eastern Arabian Sea
-# pollution: exactly the "who did this" gap DRISHTA targets.
+# pollution: exactly the "who did this" gap Pharos targets.
 
 incident:
-  case_id: "DRISHTA-DEMO-0001"
+  case_id: "PHAROS-DEMO-0001"
   status: "illustrative scenario, not a real incident. See the comment above and source_reference."
   date: "2026-01-15T02:30:00Z"   # illustrative acquisition time, matches scripts/seed_demo.py ACQUIRED_AT
   bbox: [67.9758, 17.0267, 68.0242, 17.0733]  # illustrative, matches the fixture scene's footprint

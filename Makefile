@@ -48,7 +48,7 @@ fetch-data:
 	$(MAKE) -C backend fetch-data
 
 # The single synthetic data generator: SAR scene, wind, currents,
-# offshore wind, cached origin field. DRISHTA downloads no dataset, so
+# offshore wind, cached origin field. Pharos downloads no dataset, so
 # this is where every input it consumes comes from.
 synthetic:
 	$(MAKE) -C backend synthetic

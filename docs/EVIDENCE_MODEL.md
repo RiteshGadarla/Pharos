@@ -1,6 +1,6 @@
 # The evidence model
 
-How DRISHTA turns an origin probability field and a set of reconstructed vessel tracks into a ranked, explainable evidence package.
+How Pharos turns an origin probability field and a set of reconstructed vessel tracks into a ranked, explainable evidence package.
 
 [← Back to the README](../README.md)
 

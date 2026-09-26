@@ -26,7 +26,7 @@ caveat says so. Nothing in this module is random.
 
 The multipart body is parsed with the standard library rather than
 through FastAPI's UploadFile, which needs python-multipart. That package
-is not a DRISHTA dependency, and a route that requires it fails at
+is not a Pharos dependency, and a route that requires it fails at
 import time, which would take the whole core service down with it.
 """
 
@@ -262,7 +262,7 @@ def inspect_bytes(filename: str, content_type: str | None, data: bytes) -> dict:
     tile_size = int(det_cfg["tiling"]["tile_size"])
     overlap = int(det_cfg["tiling"]["overlap_px"])
 
-    workdir = tempfile.mkdtemp(prefix="drishta-inspect-")
+    workdir = tempfile.mkdtemp(prefix="pharos-inspect-")
     try:
         path = os.path.join(workdir, "upload" + SUFFIX_FOR_FORMAT[fmt])
         with open(path, "wb") as f:

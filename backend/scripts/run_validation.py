@@ -45,7 +45,7 @@ def format_report(summary: dict) -> str:
     no_radar: Accuracy = summary["ablation_no_radar"]
 
     lines = []
-    lines.append("# DRISHTA scoring validation")
+    lines.append("# Pharos scoring validation")
     lines.append("")
     lines.append(f"Generated {datetime.datetime.utcnow().isoformat()}Z, {summary['n_incidents']} synthetic incidents.")
     lines.append("")
@@ -85,7 +85,7 @@ def format_report(summary: dict) -> str:
     lines.append(
         "The three ablations rerun the same 50 incidents with one deliberate change "
         "to the scoring, holding elimination and everything else fixed, to check "
-        "whether DRISHTA's three claimed differentiators actually matter. Rank-1 "
+        "whether Pharos's three claimed differentiators actually matter. Rank-1 "
         "accuracy only moves when a competitor's score actually overtakes the "
         "culprit's; margin (the culprit's score minus the best competitor's, mean "
         "across incidents) shows the effect even when it isn't yet large enough to "

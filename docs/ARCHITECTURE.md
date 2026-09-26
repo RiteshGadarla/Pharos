@@ -1,6 +1,6 @@
 # Architecture
 
-How DRISHTA is put together, stage by stage, and why the boundaries sit where they do.
+How Pharos is put together, stage by stage, and why the boundaries sit where they do.
 
 [← Back to the README](../README.md)
 

@@ -45,10 +45,10 @@ export default function Navbar({ dossierUrls, caseSwitcher }: Props) {
     <header className="topbar">
       {/* Full page loads to and from the other pages: they share class
           names, and each only ever loads its own stylesheet. */}
-      <a className="brand" href="/" aria-label="DRISHTA home">
-        <img className="brand-mark" src="/brand/drishta-mark-256.png" width={40} height={40} alt="" />
+      <a className="brand" href="/" aria-label="Pharos home">
+        <img className="brand-mark" src="/brand/pharos-mark-256.png" width={40} height={40} alt="" />
         <span className="brand-text">
-          <strong>DRISHTA</strong>
+          <strong>PHAROS</strong>
           <span>MARITIME INTELLIGENCE</span>
         </span>
       </a>

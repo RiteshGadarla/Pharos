@@ -1,6 +1,6 @@
 <div align="center">
 
-# DRISHTA
+# Pharos
 
 **A maritime event attribution engine.**
 
@@ -24,7 +24,7 @@ Built for Smart India Hackathon 2026, NTRO Problem Statement 26143.
 
 An oil slick on satellite imagery is a crime scene with no timestamp and no suspect, and it is not where it started.
 
-By the time a Sentinel-1 pass sees a slick, wind and current have moved it for hours. The vessel responsible is long gone, and the one most likely to be responsible is the one that stopped broadcasting its position while doing it. Existing systems answer "is there oil here". DRISHTA answers **"who put it there"**.
+By the time a Sentinel-1 pass sees a slick, wind and current have moved it for hours. The vessel responsible is long gone, and the one most likely to be responsible is the one that stopped broadcasting its position while doing it. Existing systems answer "is there oil here". Pharos answers **"who put it there"**.
 
 The system does not report where a spill started. It reports the probability of every place and time it could have started, then asks which vessel's behaviour is best explained by that distribution.
 
@@ -35,7 +35,7 @@ Underneath that sits an architectural claim: **the drift kernel is a plug in**. 
 **No dataset download is required.** Nothing here is blocked on a Copernicus account, an Earthdata login, a real AIS feed or a 40GB Zenodo archive. One SAR scene is committed to the repository as the staged sample image, and every other input the pipeline consumes is generated locally and deterministically by a single script.
 
 ```bash
-git clone https://github.com/RiteshGadarla/Slicktrace.git && cd Slicktrace
+git clone https://github.com/RiteshGadarla/Slicktrace.git pharos && cd pharos
 make setup     # venv, model weights, synthetic data, demo bundle, frontend deps
 make sample    # process the staged sample SAR image, print the oil detections
 make dev       # core service on :8000, landing page on :5173, operator console on :5173/run
@@ -44,8 +44,8 @@ make dev       # core service on :8000, landing page on :5173, operator console 
 ```
 2 oil detection(s):
   detection_id               mean prob   pixels  area km2  centroid (lon, lat)
-  DRISHTA-SAMPLE-0001-oil-000     0.636      125     0.012  (67.9972, 17.0543)
-  DRISHTA-SAMPLE-0001-oil-001     0.881     1493     0.151  (67.9965, 17.0476)
+  PHAROS-SAMPLE-0001-oil-000     0.636      125     0.012  (67.9972, 17.0543)
+  PHAROS-SAMPLE-0001-oil-001     0.881     1493     0.151  (67.9965, 17.0476)
 ```
 
 The only network fetch beyond pip and npm is the segmentation model's weights (about 205MB, from HuggingFace, no account and no API token). They are cached to disk, so every run after the first is fully offline.

@@ -32,7 +32,7 @@ def test_four_cases_with_the_hero_case_as_default(registry):
     assert registry["default_case"] == "arabian-sea-discharge"
     hero = case_registry.get_case(registry, "arabian-sea-discharge")
     # deck/scripts/make_figures.py and the dossier key off this id.
-    assert hero["case_id"] == "DRISHTA-DEMO-0001"
+    assert hero["case_id"] == "PHAROS-DEMO-0001"
     assert hero["scene"] == "committed"
 
 
@@ -84,7 +84,7 @@ def test_index_entry_reads_the_outcome_from_the_bundle_not_the_config(registry):
 
     case = case_registry.get_case(registry, "arabian-sea-discharge")
     bundle = {
-        "case_id": "DRISHTA-DEMO-0001",
+        "case_id": "PHAROS-DEMO-0001",
         "primary_detection_id": "d1",
         "detections": [
             {"detection_id": "d1", "gate": {"wind_speed_ms": 3.04, "verdict": "downgrade"}},

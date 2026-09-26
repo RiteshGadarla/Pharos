@@ -681,7 +681,7 @@ def inject_ship_targets(
     field_ds: xr.Dataset,
     acquired_at: datetime.datetime,
     culprit_mmsi: str | None = CULPRIT_MMSI,
-    scene_id: str = "DRISHTA-DEMO-0001",
+    scene_id: str = "PHAROS-DEMO-0001",
 ) -> list[ShipTarget]:
     """Synthetic ShipTarget records for the demo scene. See PLAN.md
     section 11.

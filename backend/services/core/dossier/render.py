@@ -172,7 +172,7 @@ def render_dossier(bundle: dict, scoring_config_text: str, artifact_paths: dict[
 
     # --- Cover ---
     story.append(Spacer(1, 4 * cm))
-    story.append(Paragraph("DRISHTA", ParagraphStyle(name="Wordmark", fontSize=28, leading=32)))
+    story.append(Paragraph("PHAROS", ParagraphStyle(name="Wordmark", fontSize=28, leading=32)))
     story.append(Paragraph("Case dossier", styles["Title"]))
     story.append(Spacer(1, 1 * cm))
     story.append(Paragraph(f"Case ID: {bundle['case_id']}", styles["Normal"]))
@@ -558,6 +558,6 @@ def render_dossier(bundle: dict, scoring_config_text: str, artifact_paths: dict[
     doc = SimpleDocTemplate(
         out_path, pagesize=PAGE_SIZE,
         leftMargin=MARGIN, rightMargin=MARGIN, topMargin=MARGIN, bottomMargin=MARGIN,
-        title=f"DRISHTA case dossier {bundle['case_id']}",
+        title=f"Pharos case dossier {bundle['case_id']}",
     )
     doc.build(story)

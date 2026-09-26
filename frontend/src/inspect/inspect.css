@@ -1,5 +1,5 @@
 /* =========================================================
-   DRISHTA image inspector (/inspect)
+   Pharos image inspector (/inspect)
    Only loaded on /inspect. The other pages share class names
    with each other, so everything here is prefixed ins-.
    Colours are lib/tokens.ts, repeated as custom properties.

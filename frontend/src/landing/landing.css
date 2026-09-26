@@ -1,5 +1,5 @@
 /* =========================================================
-   DRISHTA
+   PHAROS
    MARITIME INTELLIGENCE
    ========================================================= */
 @import "@fontsource/eb-garamond/400.css";
@@ -346,13 +346,24 @@ button {
    ========================================================= */
 .video-credit {
   position: absolute;
-  right: 48px;
-  bottom: 70px;
+  /* Flush to the right edge: on a window narrower than 16:9 the video is
+     cropped left and right, which pushes the mark almost to the edge. */
+  right: 0;
+  /* Sits on top of the footer rather than floating above it: on a short
+     wide window the mark reaches the bottom of the frame, and any gap
+     here would leave a sliver of it showing under the panel. */
+  bottom: 54px;
   z-index: 12;
   display: flex;
-  align-items: center;
+  /* The mark is drawn into the video, so it scales with the viewport
+     rather than staying a fixed size. Both of these are measured
+     against where it lands from 1280x800 up to 2560x1080, with margin. */
+  width: max(240px, 11vw);
+  height: 17vh;
+  min-height: 120px;
+  align-items: flex-end;
   gap: 12px;
-  padding: 9px 13px;
+  padding: 14px 16px;
   background: rgba(4, 17, 25, 0.96);
   pointer-events: none;
   border-top: 1px solid rgba(70, 188, 215, 0.48);
@@ -361,6 +372,7 @@ button {
 
 .video-credit-line {
   width: 24px;
+  margin-bottom: 4px;
   height: 2px;
   flex-shrink: 0;
   background: #36c7ef;
@@ -373,14 +385,14 @@ button {
 }
 
 .video-credit-content span {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.18em;
   color: rgba(225, 249, 252, 0.95);
 }
 
 .video-credit-content small {
-  font-size: 7px;
+  font-size: 8px;
   letter-spacing: 0.12em;
   color: rgba(127, 185, 198, 0.72);
 }
@@ -399,7 +411,7 @@ button {
   align-items: center;
   justify-content: space-between;
   padding: 0 3%;
-  background: rgba(2, 14, 25, 0.88);
+  background: rgb(2, 14, 25);
   color: #80a9b8;
   font-size: 8px;
   letter-spacing: 0.03em;
@@ -565,8 +577,8 @@ button {
      GEMINI COVER
      ------------------------------------------------------- */
   .video-credit {
-    right: 20px;
-    bottom: 75px;
+    /* The footer is taller at this breakpoint. */
+    bottom: 65px;
   }
 
   /* -------------------------------------------------------

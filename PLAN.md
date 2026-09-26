@@ -1,6 +1,6 @@
 # PLAN.md
 
-Build plan for **DRISHTA**, a maritime event attribution engine.
+Build plan for **Pharos**, a maritime event attribution engine.
 Target: Smart India Hackathon 2026, NTRO Problem Statement 26143.
 Read the whole file before writing any code.
 
@@ -34,7 +34,7 @@ If you have the old plan in context, these are the deltas. Everything not listed
 
 | # | Change | Why |
 |---|---|---|
-| 1 | Renamed to DRISHTA | Project rename |
+| 1 | Renamed to Pharos | Project rename |
 | 2 | **New P-1 phase: deck assets first** | Presentation is submitted before the prototype is judged |
 | 3 | **Drift kernel is pluggable**, `DriftKernel` protocol with OpenOil, Leeway and Null implementations | Makes the engine event agnostic, which is the differentiator with NTRO |
 | 4 | **Three verdict classes**: ATTRIBUTED, RANKED, DARK_CONFIRMED | "No broadcasting suspect found" is a finding for an intelligence organisation, not a failure |
@@ -85,7 +85,7 @@ Do not build these. If you find yourself building one, stop.
 ## 3. Repository layout
 
 ```
-drishta/
+pharos/
   README.md
   PLAN.md
   Makefile                      # delegates to backend/Makefile
@@ -1037,12 +1037,12 @@ The Cerulean public read API is an OGC API Features service served by `tipg` at 
 2. Query items with `bbox` and `datetime` filters, requesting GeoJSON.
 3. Cache every response to `backend/data/cerulean/` with a hash in the manifest. After the first fetch, the harness runs offline.
 4. Filter to records where the validation and human confidence fields indicate expert review, so you compare against reviewed polygons rather than raw model output.
-5. For each shared Sentinel-1 scene id, download the GRD from ASF, run DRISHTA detection, and compute IoU against the Cerulean polygon.
+5. For each shared Sentinel-1 scene id, download the GRD from ASF, run Pharos detection, and compute IoU against the Cerulean polygon.
 6. Write an agreement table into `validation.md`.
 
 Report as **agreement with an independent production system**, never as accuracy. Cerulean is another model with human review on some records, not ground truth. State the operating point difference: their production model runs on Sentinel-1 VV scaled to 80 m resolution with 512x512 tiles for global throughput; you run at full GRD resolution on a single scene.
 
-Second use, higher value: pull records where their source category is **Dark**, meaning their vessel association could not resolve a broadcasting source, and run DRISHTA's stages 5 through 8 on one. Their vessel association considers only long linear detections and nearby broadcasting vessels, and their AIS carries a delay of up to 72 hours, so Dark records are exactly the gap DRISHTA targets. Resolving one is the strongest single result available to this project. Attempt it once P8 works.
+Second use, higher value: pull records where their source category is **Dark**, meaning their vessel association could not resolve a broadcasting source, and run Pharos's stages 5 through 8 on one. Their vessel association considers only long linear detections and nearby broadcasting vessels, and their AIS carries a delay of up to 72 hours, so Dark records are exactly the gap Pharos targets. Resolving one is the strongest single result available to this project. Attempt it once P8 works.
 
 Credit SkyTruth on the validation page and in the dossier provenance section.
 

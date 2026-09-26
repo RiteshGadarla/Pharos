@@ -13,7 +13,7 @@ from services.detection.infer import load_model, run_inference
 from services.detection.polygonize import detect_oil
 from services.detection.render import render_geotiff
 
-app = FastAPI(title="drishta-detection")
+app = FastAPI(title="pharos-detection")
 
 CONFIG_PATH = "config/pipeline.yaml"
 

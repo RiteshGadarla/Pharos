@@ -248,9 +248,9 @@ export default function Inspect() {
   return (
     <div className="ins-page">
       <header className="ins-header">
-        <a className="ins-brand" href="/" aria-label="DRISHTA home">
-          <img className="ins-brand-mark" src="/brand/drishta-mark-256.png" width={32} height={32} alt="" />
-          <strong>DRISHTA</strong>
+        <a className="ins-brand" href="/" aria-label="Pharos home">
+          <img className="ins-brand-mark" src="/brand/pharos-mark-256.png" width={32} height={32} alt="" />
+          <strong>PHAROS</strong>
           <span>Image inspector</span>
         </a>
         <nav className="ins-nav" aria-label="Pages">

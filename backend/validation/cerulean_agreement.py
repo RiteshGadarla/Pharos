@@ -1,4 +1,4 @@
-"""Agreement between DRISHTA detection and Cerulean's reviewed slick
+"""Agreement between Pharos detection and Cerulean's reviewed slick
 polygons. See PLAN.md section 17.2.
 
 VALIDATION ONLY, see the header of cerulean_client.py.
@@ -24,10 +24,10 @@ from validation.cerulean_client import ATTRIBUTION, OPERATING_POINT_NOTE
 class SceneAgreement:
     scene_id: str
     n_cerulean_polygons: int
-    n_drishta_polygons: int
+    n_pharos_polygons: int
     iou: float
     cerulean_area_km2: float
-    drishta_area_km2: float
+    pharos_area_km2: float
 
 
 @dataclass
@@ -76,21 +76,21 @@ def _area_km2(geoms: list[dict]) -> float:
 def compare_scene(
     scene_id: str,
     cerulean_features: list[dict],
-    drishta_feature_collection: dict,
+    pharos_feature_collection: dict,
 ) -> SceneAgreement:
     """One scene's agreement figure."""
     cerulean_geoms = [f["geometry"] for f in cerulean_features if f.get("geometry")]
-    drishta_geoms = [
-        f["geometry"] for f in drishta_feature_collection.get("features", []) if f.get("geometry")
+    pharos_geoms = [
+        f["geometry"] for f in pharos_feature_collection.get("features", []) if f.get("geometry")
     ]
-    iou, cerulean_area, drishta_area = polygon_iou(cerulean_geoms, drishta_geoms)
+    iou, cerulean_area, pharos_area = polygon_iou(cerulean_geoms, pharos_geoms)
     return SceneAgreement(
         scene_id=scene_id,
         n_cerulean_polygons=len(cerulean_geoms),
-        n_drishta_polygons=len(drishta_geoms),
+        n_pharos_polygons=len(pharos_geoms),
         iou=iou,
         cerulean_area_km2=cerulean_area,
-        drishta_area_km2=drishta_area,
+        pharos_area_km2=pharos_area,
     )
 
 
@@ -117,13 +117,13 @@ def render_markdown(report: AgreementReport) -> str:
         return "\n".join(lines)
 
     lines += [
-        "| scene | Cerulean polygons | DRISHTA polygons | IoU | Cerulean km2 | DRISHTA km2 |",
+        "| scene | Cerulean polygons | Pharos polygons | IoU | Cerulean km2 | Pharos km2 |",
         "|---|---|---|---|---|---|",
     ]
     for s in report.scenes:
         lines.append(
-            f"| `{s.scene_id}` | {s.n_cerulean_polygons} | {s.n_drishta_polygons} | "
-            f"{s.iou:.3f} | {s.cerulean_area_km2:.2f} | {s.drishta_area_km2:.2f} |"
+            f"| `{s.scene_id}` | {s.n_cerulean_polygons} | {s.n_pharos_polygons} | "
+            f"{s.iou:.3f} | {s.cerulean_area_km2:.2f} | {s.pharos_area_km2:.2f} |"
         )
     mean_iou = report.mean_iou
     lines += [

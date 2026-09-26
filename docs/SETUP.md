@@ -1,6 +1,6 @@
 # Setup and running
 
-How to install DRISHTA and run it on Linux, macOS and Windows, with no dataset download.
+How to install Pharos and run it on Linux, macOS and Windows, with no dataset download.
 
 [← Back to the README](../README.md)
 
@@ -37,7 +37,7 @@ The three steps are the same everywhere: build the Python environment, fetch the
 sudo apt install -y python3.11 python3.11-venv git make
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt install -y nodejs
 
-git clone <this repo> && cd slicktrace
+git clone <this repo> pharos && cd pharos
 make setup
 ```
 
@@ -49,7 +49,7 @@ On Fedora or RHEL, `sudo dnf install python3.11 git make nodejs`. On Arch, `sudo
 brew install python@3.11 node git
 # make ships with the Xcode command line tools: xcode-select --install
 
-git clone <this repo> && cd slicktrace
+git clone <this repo> pharos && cd pharos
 make setup
 ```
 
@@ -64,8 +64,8 @@ What Windows genuinely does not have is `make` and `bash`, so the Makefile targe
 Install [Python 3.11](https://www.python.org/downloads/) (any 3.11.x, and tick "Add python.exe to PATH") and [Node.js 22 LTS](https://nodejs.org/), then paste this in one block:
 
 ```powershell
-git clone <this repo>
-cd slicktrace\backend
+git clone <this repo> pharos
+cd pharos\backend
 
 py -3.11 -m venv .venv
 .\.venv\Scripts\python -m pip install --upgrade pip
@@ -118,7 +118,7 @@ Copy-Item data\precomputed\demo_bundle.json, data\precomputed\case_dossier.pdf, 
 
 Neither `make_synthetic_data.py` nor `process_sample.py` needs `PYTHONPATH` set or a particular working directory: both put the backend directory on `sys.path` themselves, which is most of why they exist as single entry points. `seed_demo.py` and `run_validation.py` are older and still expect `backend\` as the working directory with it on `PYTHONPATH`, which is what the `$env:PYTHONPATH` prefix above is for.
 
-**WSL2 is still worth considering**, not because native Windows is broken but because it gives you `make` and the bash tooling, so every command in this README works verbatim. `wsl --install -d Ubuntu`, then follow [Linux](#linux). Clone inside the WSL filesystem (`~/slicktrace`), not under `/mnt/c/`, or file IO will dominate every step.
+**WSL2 is still worth considering**, not because native Windows is broken but because it gives you `make` and the bash tooling, so every command in this README works verbatim. `wsl --install -d Ubuntu`, then follow [Linux](#linux). Clone inside the WSL filesystem (`~/pharos`), not under `/mnt/c/`, or file IO will dominate every step.
 
 ## Generating the synthetic data
 

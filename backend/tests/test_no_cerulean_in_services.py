@@ -3,7 +3,7 @@
 Cerulean is another model with partial human review, not ground truth.
 Using it at runtime would make the demo depend on a third-party network
 service, which breaks the "network cable unplugged" requirement, and it
-would let an external system's operating point leak into DRISHTA's own
+would let an external system's operating point leak into Pharos's own
 claims.
 
 This test scans the source rather than trusting a code review, because

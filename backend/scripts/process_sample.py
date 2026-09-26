@@ -1,6 +1,6 @@
 """Runs detection over the staged sample SAR image and prints what it found.
 
-The smallest useful thing DRISHTA can be asked to do, and the fastest way
+The smallest useful thing Pharos can be asked to do, and the fastest way
 to confirm an install works. It needs no dataset download, no database,
 no Docker and no frontend: the sample scene is committed to the
 repository (data/fixtures/SAMPLE_SCENE.md explains what it is), so a
@@ -35,7 +35,7 @@ if BACKEND_DIR not in sys.path:
 
 DEFAULT_SCENE = "data/fixtures/synthetic_scene.tif"
 DEFAULT_OUT = "data/processed/sample_detections.geojson"
-DEFAULT_SCENE_ID = "DRISHTA-SAMPLE-0001"
+DEFAULT_SCENE_ID = "PHAROS-SAMPLE-0001"
 
 
 def _area_km2(geometry: dict, lat_hint: float) -> float:
@@ -52,7 +52,7 @@ def _area_km2(geometry: dict, lat_hint: float) -> float:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Process one SAR scene through DRISHTA's detection stage.",
+        description="Process one SAR scene through Pharos's detection stage.",
     )
     parser.add_argument("--scene", default=DEFAULT_SCENE, help=f"GeoTIFF to process (default: {DEFAULT_SCENE})")
     parser.add_argument("--scene-id", default=DEFAULT_SCENE_ID, help="scene id stamped onto every detection")

@@ -24,7 +24,7 @@ from services.core.inspect import router as inspect_router
 from services.core.ledger import completeness as completeness_ledger
 from services.core.ledger import dark as dark_ledger
 
-app = FastAPI(title="drishta-core")
+app = FastAPI(title="pharos-core")
 
 app.add_middleware(
     CORSMiddleware,
@@ -186,5 +186,5 @@ def dossier(case: str | None = Query(default=None)) -> FileResponse:
             status_code=404,
             detail=f"Dossier not built yet. {BUILD_HINT}" if case else "Dossier not built yet. Run: make seed-demo",
         )
-    filename = f"drishta_case_dossier_{case}.pdf" if case else "drishta_case_dossier.pdf"
+    filename = f"pharos_case_dossier_{case}.pdf" if case else "pharos_case_dossier.pdf"
     return FileResponse(path, media_type="application/pdf", filename=filename)

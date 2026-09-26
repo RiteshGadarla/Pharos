@@ -11,7 +11,7 @@ venv:
 # several, and it resolves the dependency order itself (origin_field
 # integrates through currents and wind_offshore, so it runs after them).
 #
-# DRISHTA needs no downloaded dataset to run. This target is what makes
+# Pharos needs no downloaded dataset to run. This target is what makes
 # that true, and it is the same script the README points Linux, macOS and
 # Windows users at.
 #

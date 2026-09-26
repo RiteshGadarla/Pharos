@@ -103,7 +103,7 @@ def build_certificate(
             "its own hash."
         ),
         system_description=(
-            f"DRISHTA maritime event attribution pipeline, git commit {git_commit}. "
+            f"Pharos maritime event attribution pipeline, git commit {git_commit}. "
             f"Detection uses the pretrained DeepLabV3+ model sahilvishwa2108/oil-spill-deeplab "
             f"loaded from local storage. The origin probability field was produced by the "
             f"{kernel} drift kernel over an ensemble of {field.get('n_members', 'unknown')} "

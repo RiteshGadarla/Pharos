@@ -32,7 +32,7 @@ default_case: arabian-sea-discharge
 
 cases:
   - id: arabian-sea-discharge
-    case_id: DRISHTA-DEMO-0001
+    case_id: PHAROS-DEMO-0001
     title: Broadcasting tanker discharge
     subtitle: >-
       A laden tanker slows along its lane, lays a fresh slick in a
@@ -84,7 +84,7 @@ cases:
         n_tugs: 1
 
   - id: monsoon-high-wind
-    case_id: DRISHTA-DEMO-0002
+    case_id: PHAROS-DEMO-0002
     title: Gust front splits the scene
     subtitle: >-
       Early southwest monsoon. A gust front crosses the acquisition, the
@@ -165,7 +165,7 @@ cases:
         n_tugs: 1
 
   - id: calm-intermonsoon
-    case_id: DRISHTA-DEMO-0003
+    case_id: PHAROS-DEMO-0003
     title: Calm water, wide field
     subtitle: >-
       Pre-monsoon calm. The wind at the slick sits just above the gate's
@@ -240,7 +240,7 @@ cases:
         n_tugs: 1
 
   - id: dark-vessel-night-pass
-    case_id: DRISHTA-DEMO-0004
+    case_id: PHAROS-DEMO-0004
     title: Radar sees a dark hull
     subtitle: >-
       A night pass in the northeast monsoon. No broadcasting vessel was

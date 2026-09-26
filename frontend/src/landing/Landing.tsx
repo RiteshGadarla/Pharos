@@ -98,9 +98,9 @@ export default function Landing() {
 
       <section className="hero">
         <div className="hero-brand">
-          <img className="hero-brand-mark" src="/brand/drishta-mark-256.png" width={64} height={64} alt="" />
+          <img className="hero-brand-mark" src="/brand/pharos-mark-256.png" width={64} height={64} alt="" />
           <div className="hero-brand-text">
-            <strong>DRISHTA</strong>
+            <strong>PHAROS</strong>
             <span>MARITIME INTELLIGENCE</span>
           </div>
         </div>
@@ -137,7 +137,7 @@ export default function Landing() {
       <div className="video-credit">
         <div className="video-credit-line" />
         <div className="video-credit-content">
-          <span>DRISHTA</span>
+          <span>PHAROS</span>
           <small>EARTH OBSERVATION SYSTEM</small>
         </div>
       </div>
@@ -145,8 +145,8 @@ export default function Landing() {
       <footer className="bottombar">
         <div className="footer-left">
           <b>
-            <img className="footer-brand-mark" src="/brand/drishta-mark-256.png" width={18} height={18} alt="" />
-            DRISHTA
+            <img className="footer-brand-mark" src="/brand/pharos-mark-256.png" width={18} height={18} alt="" />
+            PHAROS
           </b>
           <span />
           <small>MARITIME INTELLIGENCE FOR A CLEANER, SAFER OCEAN</small>

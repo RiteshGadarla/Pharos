@@ -1,6 +1,6 @@
-"""The one command that builds every synthetic input DRISHTA needs to run.
+"""The one command that builds every synthetic input Pharos needs to run.
 
-DRISHTA ships with no downloaded dataset. Real Sentinel-1 scenes, real
+Pharos ships with no downloaded dataset. Real Sentinel-1 scenes, real
 CMEMS currents, real ERA5 wind and real AIS feeds are all blocked on the
 account registrations in PLAN.md section 4A, and none of them are needed
 to run the system: every input the pipeline consumes can be generated
@@ -164,7 +164,7 @@ def _run_generator(script_name: str, force: bool = False) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Generate every synthetic input DRISHTA needs. No dataset download required.",
+        description="Generate every synthetic input Pharos needs. No dataset download required.",
     )
     parser.add_argument(
         "--only",
