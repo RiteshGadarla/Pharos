@@ -52,6 +52,16 @@ The only network fetch beyond pip and npm is the segmentation model's weights (a
 
 Runs natively on **Linux, macOS and Windows**. Windows has no `make`, so `python scripts/dev.py` replaces `make dev` there and the rest run as direct commands. Full per-platform instructions, troubleshooting and every command: **[docs/SETUP.md](docs/SETUP.md)**.
 
+## What it looks like
+
+[![The Pharos landing page](docs/screenshots/01-landing.jpg)](docs/SCREENSHOTS.md)
+
+The operator console walks one case through three stages, ending in a ranked, explainable verdict. Here 17 vessels entered the origin window, 14 were eliminated with a stated reason each, and the survivor that best explains the slick leads rank 2 by 5.61.
+
+[![The attribution stage of the operator console](docs/screenshots/04-console-attribution.png)](docs/SCREENSHOTS.md)
+
+All five screens, with what each one is claiming: **[docs/SCREENSHOTS.md](docs/SCREENSHOTS.md)**.
+
 ## Architecture
 
 ```mermaid
