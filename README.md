@@ -35,7 +35,7 @@ Underneath that sits an architectural claim: **the drift kernel is a plug in**. 
 **No dataset download is required.** Nothing here is blocked on a Copernicus account, an Earthdata login, a real AIS feed or a 40GB Zenodo archive. One SAR scene is committed to the repository as the staged sample image, and every other input the pipeline consumes is generated locally and deterministically by a single script.
 
 ```bash
-git clone https://github.com/RiteshGadarla/Slicktrace.git pharos && cd pharos
+git clone https://github.com/RiteshGadarla/Pharos.git && cd pharos
 make setup     # venv, model weights, synthetic data, demo bundle, frontend deps
 make sample    # process the staged sample SAR image, print the oil detections
 make dev       # core service on :8000, landing page on :5173, operator console on :5173/run
