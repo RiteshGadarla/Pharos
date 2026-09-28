@@ -6,7 +6,7 @@ How Pharos turns an origin probability field and a set of reconstructed vessel t
 
 ---
 
-No classifier is trained for attribution. There is no ground truth to train one on, and a black box cannot be defended in court. Every factor below is an explicit weighted term whose weight lives in `backend/config/scoring.yaml`, is shown in the UI, and is printed verbatim in the dossier.
+No classifier is trained for attribution. There is no ground truth to train one on, and a black box cannot be defended in court. Every factor below is an explicit weighted term whose weight lives in `backend/config/scoring.yaml`, is shown in the UI, and is printed in full in the dossier.
 
 ```mermaid
 flowchart LR
@@ -15,7 +15,7 @@ flowchart LR
     RADAR["Unmatched SAR<br/>ship targets"] --> ELIM
     ELIM["Elimination<br/>every drop carries a reason"] --> SCORE
     ELIM -. "reasons" .-> LOG["Elimination log"]
-    SCORE["Weighted score<br/>F1 to F8"] --> VERDICT{"Verdict"}
+    SCORE["Weighted score<br/>F1 to F9"] --> VERDICT{"Verdict"}
     VERDICT --> A["ATTRIBUTED"]
     VERDICT --> R["RANKED"]
     VERDICT --> D["DARK_CONFIRMED"]
@@ -29,20 +29,21 @@ flowchart LR
 ```
 
 
-## The eight evidence factors
+## The nine evidence factors
 
-Weights and thresholds live in `backend/config/scoring.yaml`, are shown in the UI, and are printed verbatim in the dossier.
+Weights and thresholds live in `backend/config/scoring.yaml`, are shown in the UI, and are printed in full in the dossier. The weight in brackets is the one the config ships with.
 
 | | Factor | What it measures |
 |---|---|---|
-| F1 | field integral | Origin probability integrated along the vessel's reconstructed track. Rewards a vessel that lingered inside a broad uncertain cloud over one that clipped a narrow peak, which distance to centroid ranking gets exactly backwards |
-| F2 | dark overlap | How much origin probability mass the vessel's dead reckoned envelope covered while it was dark |
-| F3 | axis alignment | Agreement, modulo 180 degrees, between the slick's major axis and the vessel's course |
-| F4 | speed anomaly | Sustained slowing below the vessel's own median transit speed while inside the field |
-| F5 | course anomaly | Course change across the vessel's passage through the origin window |
-| F6 | vessel plausibility | A small prior by vessel type. **Downweights only. It never eliminates**, and its weight is kept low deliberately |
-| F7 | AIS integrity | Aggregated severity of self report inconsistencies: missing IMO, implied speed beyond the plausible maximum, static data changing mid passage, MMSI reuse, position jumps. This answers "AIS can be spoofed, not just switched off" with a factor rather than a shrug |
-| F8 | radar confirmed dark | An unmatched ship target from the SAR scene itself fell inside the vessel's dark envelope and in a live cell of the origin field. **The only factor backed by a second, independent sensor**, which is why its weight is the highest in the model |
+| F1 | field integral (3.0) | Origin probability integrated along the vessel's reconstructed track. Rewards a vessel that lingered inside a broad uncertain cloud over one that clipped a narrow peak, which distance to centroid ranking gets exactly backwards |
+| F2 | dark overlap (2.5) | How much origin probability mass the vessel's dead reckoned envelope covered while it was dark |
+| F3 | axis alignment (1.5) | Agreement, modulo 180 degrees, between the slick's major axis and the vessel's course |
+| F4 | speed anomaly (1.0) | Sustained slowing below the vessel's own median transit speed while inside the field |
+| F5 | course anomaly (0.75) | Course change across the vessel's passage through the origin window |
+| F6 | vessel plausibility (0.25) | A small prior by vessel type. **Downweights only. It never eliminates**, and its weight is kept low deliberately |
+| F7 | AIS integrity (1.25) | Aggregated severity of self report inconsistencies: missing IMO, implied speed beyond the plausible maximum, static data changing mid passage, MMSI reuse, position jumps. This answers "AIS can be spoofed, not just switched off" with a factor rather than a shrug |
+| F8 | radar confirmed dark (3.0) | An unmatched ship target from the SAR scene itself fell inside the vessel's dark envelope and in a live cell of the origin field. **The only factor backed by a second, independent sensor**, which is why it is weighted level with F1, the joint highest in the model |
+| F9 | temporal consistency (0.75) | How close the vessel's best opportunity to be the source sits to the origin window the slick's own condition implies. F1 already weights the field's time axis, but it does so inside an integral over space, where a lot of mass at the wrong hour looks the same as a little mass at the right one. F9 asks the timing question on its own, with space marginalised out, so it can be shown as its own step in the case build and argued with. Capped at 0.75 for the reason F6 is capped: it is derived from heuristic radiometry, so it must shade a ranking and never decide one |
 
 ## The three verdict classes
 
@@ -66,7 +67,7 @@ The cross check is the highest value addition in this revision, because it conve
 
 `services/core/legal/marpol.py` evaluates the Annex I conditions that are checkable from a reconstructed track: proceeding en route, distance from nearest land, whether the track entered a special area, and an estimated instantaneous discharge rate. The rate is always a band, never a single figure, and the schema enforces that: SAR sees that a damping film is present, never how thick it is.
 
-This layer never outputs a determination of illegality. It reports which conditions the reconstructed behaviour appears not to satisfy, with its assumptions printed verbatim in the dossier. Oil content in parts per million is not observable from satellite, so no assessment can ever conclude that a discharge was permitted on that basis, and the code does not attempt it.
+This layer never outputs a determination of illegality. It reports which conditions the reconstructed behaviour appears not to satisfy, with its assumptions printed in full in the dossier. Oil content in parts per million is not observable from satellite, so no assessment can ever conclude that a discharge was permitted on that basis, and the code does not attempt it.
 
 ## What the certificate claims
 
@@ -84,6 +85,7 @@ These hold regardless of configuration, and tests enforce them:
 - **Every elimination carries a non empty reason.** The reason is written to the elimination log and shown in the console.
 - **The forecast is never a scoring input.** Enforced in code, see `services/core/forecast/forward.py:assert_not_scoring_input`.
 - **The field is never collapsed to a point for scoring.** A centroid may be displayed for orientation but never enters the math. F1 integrates over the field precisely so that a vessel lingering in a broad uncertain cloud outranks one clipping a narrow peak.
+- **Timing can never outvote the origin field.** F9 runs through a logit, so it swings both ways and its full range is its weight times 5.89. At a weight of 1.0 that came to more than F1 and F2 can muster between them, which would have let a heuristic age band overturn the field itself. The weight is 0.75 and `backend/tests/test_temporal_consistency.py` holds the bound.
 
 ## Where the weights live
 

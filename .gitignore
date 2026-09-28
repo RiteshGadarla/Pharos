@@ -48,3 +48,6 @@ backend/data/fixtures/*.tif
 # precomputed demo bundle, so no reason to carry binary diffs in history.
 deck/figures/*.png
 /personal
+# SIH portal submission text (idea title, description, abstract). Drafted
+# from the docs and pasted into the portal, not part of the build.
+/submission

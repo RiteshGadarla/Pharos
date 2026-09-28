@@ -109,7 +109,7 @@ flowchart TD
     S10 -->|"AISTrack, DarkGap,<br/>IntegrityFlag"| S11
     S11 -->|"matched /<br/>unmatched"| S12
 
-    S12["elimination<br/>core/scoring/eliminate.py"] -->|Elimination| S13["scoring F1 to F8<br/>core/scoring/engine.py"]
+    S12["elimination<br/>core/scoring/eliminate.py"] -->|Elimination| S13["scoring F1 to F9<br/>core/scoring/engine.py"]
     S13 -->|SuspectScore| S14["verdict<br/>core/scoring/verdict.py"]
     S14 -->|CaseVerdict| S15["MARPOL Annex I<br/>core/legal/marpol.py"]
     S15 --> S16["infrastructure flag<br/>core/crosscheck/infrastructure.py"]
@@ -142,7 +142,7 @@ SAR scene
   -> AIS integrity           services/core/ais/integrity.py      -> IntegrityFlag
   -> radar cross check       services/core/crosscheck/radar.py   -> matched / unmatched targets
   -> elimination             services/core/scoring/eliminate.py  -> Elimination
-  -> scoring, F1 to F8       services/core/scoring/engine.py     -> SuspectScore
+  -> scoring, F1 to F9       services/core/scoring/engine.py     -> SuspectScore
   -> verdict                 services/core/scoring/verdict.py    -> CaseVerdict
   -> MARPOL Annex I          services/core/legal/marpol.py       -> MarpolAssessment
   -> infrastructure flag     services/core/crosscheck/infrastructure.py

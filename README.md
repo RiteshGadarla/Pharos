@@ -9,7 +9,7 @@ Detect an oil slick on satellite radar, reconstruct where and when it was releas
 [![Python](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)](docs/SETUP.md)
 [![Node](https://img.shields.io/badge/node-20.19%2B-339933?logo=nodedotjs&logoColor=white)](docs/SETUP.md)
 [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-555)](docs/SETUP.md#setup-per-platform)
-[![Tests](https://img.shields.io/badge/tests-253%20passing-2ea44f)](docs/VALIDATION.md)
+[![Tests](https://img.shields.io/badge/tests-300%2B%20passing-2ea44f)](docs/VALIDATION.md)
 [![No dataset required](https://img.shields.io/badge/dataset-not%20required-8957e5)](docs/DATA.md)
 
 Built for Smart India Hackathon 2026, NTRO Problem Statement 26143.
@@ -136,7 +136,7 @@ flowchart TD
     I --> J["Radar cross check:<br/>does an unmatched SAR hull<br/>sit in that envelope?"]
 
     J --> K["Eliminate, with a reason<br/>for every vessel dropped"]
-    K --> L["Score survivors on<br/>8 explicit evidence factors"]
+    K --> L["Score survivors on<br/>9 explicit evidence factors"]
     L --> M{"Verdict"}
     M --> N(["ATTRIBUTED<br/>one vessel dominates"])
     M --> O(["RANKED<br/>ordered list with reasons"])
@@ -159,7 +159,7 @@ Stage by stage, with the file that implements each one: **[docs/ARCHITECTURE.md]
 | | |
 |---|---|
 | **A field, never a point** | The hindcast output is a probability distribution over latitude, longitude and time. A centroid may be drawn for orientation but never enters the scoring math |
-| **Eight explicit factors** | No classifier is trained for attribution. Every weight lives in `backend/config/scoring.yaml`, is shown in the UI, and is printed verbatim in the dossier. See [docs/EVIDENCE_MODEL.md](docs/EVIDENCE_MODEL.md) |
+| **Nine explicit factors** | No classifier is trained for attribution. Every weight lives in `backend/config/scoring.yaml`, is shown in the UI, and is printed in full in the dossier. See [docs/EVIDENCE_MODEL.md](docs/EVIDENCE_MODEL.md) |
 | **Two independent sensors** | A dark vessel is confirmed against an unmatched ship hull in the same SAR scene, so darkness becomes an observation rather than an inference about missing data |
 | **Every elimination has a reason** | Non empty, logged, and shown on screen. Vessel type never eliminates, it only downweights. Dark periods never eliminate either |
 | **Hash sealed output** | The dossier carries the SHA-256 of every input artifact and a Bharatiya Sakshya Adhiniyam s.63 Part A certificate. Part B is left for a human to sign, because the statute requires that |
@@ -171,7 +171,7 @@ Stage by stage, with the file that implements each one: **[docs/ARCHITECTURE.md]
 |---|---|
 | **[SETUP.md](docs/SETUP.md)** | Prerequisites, per-platform setup for Linux, macOS and Windows, synthetic data generation, every command, troubleshooting |
 | **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** | The pipeline stage by stage, the pluggable drift kernel, service boundaries, the operator console |
-| **[EVIDENCE_MODEL.md](docs/EVIDENCE_MODEL.md)** | The eight factors, the three verdict classes, the radar cross check and its limits, MARPOL, the s.63 certificate |
+| **[EVIDENCE_MODEL.md](docs/EVIDENCE_MODEL.md)** | The nine factors, the three verdict classes, the radar cross check and its limits, MARPOL, the s.63 certificate |
 | **[DATA.md](docs/DATA.md)** | What is real, what is synthetic, why, and how to swap in real data |
 | **[VALIDATION.md](docs/VALIDATION.md)** | Three independent validation tracks and what each one can and cannot claim |
 | **[STATUS.md](docs/STATUS.md)** | Phase by phase build status and what the open items are blocked on |

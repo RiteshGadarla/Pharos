@@ -118,7 +118,7 @@ Copy-Item data\precomputed\demo_bundle.json, data\precomputed\case_dossier.pdf, 
 
 Neither `make_synthetic_data.py` nor `process_sample.py` needs `PYTHONPATH` set or a particular working directory: both put the backend directory on `sys.path` themselves, which is most of why they exist as single entry points. `seed_demo.py` and `run_validation.py` are older and still expect `backend\` as the working directory with it on `PYTHONPATH`, which is what the `$env:PYTHONPATH` prefix above is for.
 
-**WSL2 is still worth considering**, not because native Windows is broken but because it gives you `make` and the bash tooling, so every command in this README works verbatim. `wsl --install -d Ubuntu`, then follow [Linux](#linux). Clone inside the WSL filesystem (`~/pharos`), not under `/mnt/c/`, or file IO will dominate every step.
+**WSL2 is still worth considering**, not because native Windows is broken but because it gives you `make` and the bash tooling, so every command in this README works unchanged. `wsl --install -d Ubuntu`, then follow [Linux](#linux). Clone inside the WSL filesystem (`~/pharos`), not under `/mnt/c/`, or file IO will dominate every step.
 
 ## Generating the synthetic data
 

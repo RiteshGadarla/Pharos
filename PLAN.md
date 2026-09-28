@@ -1174,7 +1174,7 @@ Build so each is answered by clicking something, not by talking.
 | "Your AIS is synthetic." | The PS permits it, in these words. Only the incident is invented, and the schema is the MarineCadastre format the PS names. | The PS quote in `demo.yaml`, the schema |
 | "You could accuse an innocent ship." | The system never accuses. Ranked with a printed factor breakdown, vessel type only downweights, and the cover states it is evidence for a human investigator. | Dossier cover, factor bars, `scoring.yaml` on screen |
 | "AIS can be spoofed, not just switched off." | Factor F7. And independently, radar saw a hull where AIS reported nothing. | F7 breakdown, the unmatched target |
-| "Unmatched radar target does not mean guilty." | Correct. We report count, size and position, with the stated limitations, and it is one factor among eight. | The radar caveat page in the dossier |
+| "Unmatched radar target does not mean guilty." | Correct. We report count, size and position, with the stated limitations, and it is one factor among nine. | The radar caveat page in the dossier |
 | "48 hour backward drift is too uncertain." | That is the design premise. Uncertainty is the scoring surface. | Drag the scrubber backwards |
 | "How is this different from Cerulean?" | It has no drift model, so it never computes an origin. It evaluates broadcasting vessels only, with AIS delayed up to 72 hours, and files unresolved cases as Dark. Resolving those is what we built. | Beat 6b, and the P11a result |
 | "What if it was a platform, not a ship?" | Flagged explicitly, and we do not blame a vessel by default. | The infrastructure flag |
