@@ -218,4 +218,4 @@ These are load bearing. They are in the code, the dossier and the UI, not just h
 - Dark periods raise suspicion. They never drop a vessel.
 - The output is ranked evidence for a human investigator. It is not an automated accusation.
 - Every stochastic component takes its seed from configuration. Two runs of the demo produce identical numbers.
- 
+   
