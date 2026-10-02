@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="frontend/public/brand/pharos-mark.png" alt="Pharos Icon" width="128" />
+
 # Pharos
 
 **A maritime event attribution engine.**
@@ -10,7 +12,6 @@ Detect an oil slick on satellite radar, reconstruct where and when it was releas
 [![Node](https://img.shields.io/badge/node-20.19%2B-339933?logo=nodedotjs&logoColor=white)](docs/SETUP.md)
 [![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-555)](docs/SETUP.md#setup-per-platform)
 [![Tests](https://img.shields.io/badge/tests-300%2B%20passing-2ea44f)](docs/VALIDATION.md)
-[![No dataset required](https://img.shields.io/badge/dataset-not%20required-8957e5)](docs/DATA.md)
 
 Built for Smart India Hackathon 2026, NTRO Problem Statement 26143.
 

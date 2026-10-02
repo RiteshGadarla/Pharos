@@ -51,3 +51,4 @@ deck/figures/*.png
 # SIH portal submission text (idea title, description, abstract). Drafted
 # from the docs and pasted into the portal, not part of the build.
 /submission
+.vscode/
